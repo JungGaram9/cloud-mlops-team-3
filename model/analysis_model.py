@@ -75,15 +75,6 @@ def split_data(df, test_size=0.2, val_size=0.2, random_state=RANDOM_STATE):
     return train, val, test
 
 
-def exclude_suspect_purchases(df):
-    """PageValues 로그 누락이 의심되는 행(Revenue=1 이면서 PageValues=0)을 제외한다.
-
-    학습 세트에만 적용하고 검증/테스트 세트는 실제 분포 그대로 평가하기 위해 원본을 유지한다.
-    """
-    suspect = (df[TARGET] == 1) & (df["PageValues"] == 0)
-    return df[~suspect], int(suspect.sum())
-
-
 def save_splits(train_df, val_df, test_df, split_dir=SPLIT_DIR):
     """분할된 세트를 CSV로 저장해 이후 동일한 세트로 재평가할 수 있게 한다."""
     split_dir.mkdir(parents=True, exist_ok=True)
@@ -174,13 +165,12 @@ def evaluate(bundle, df):
 
 
 def train(data_path=DATA_PATH):
-    """분할 → 학습 세트 이상치 제외 → 후보 모델 학습(train) → 모델/임계값 선택(val) → 최종 평가(test) → 산출물 저장.
+    """분할 → 후보 모델 학습(train) → 모델/임계값 선택(val) → 최종 평가(test) → 산출물 저장.
 
     테스트 세트는 모델 선택과 임계값 결정에 사용하지 않고 마지막 평가에만 한 번 사용한다.
     """
     df = clean_data(load_raw_data(data_path))
     train_df, val_df, test_df = split_data(df)
-    train_df, excluded = exclude_suspect_purchases(train_df)
     save_splits(train_df, val_df, test_df)
 
     X_train, y_train = train_df[FEATURES], train_df[TARGET]
@@ -206,7 +196,6 @@ def train(data_path=DATA_PATH):
 
     report = {
         "split_sizes": {"train": len(train_df), "val": len(val_df), "test": len(test_df)},
-        "excluded_from_train": {"rule": "Revenue=1 & PageValues=0", "count": excluded},
         "selection_metric": "val pr_auc",
         "selected_model": best_name,
         "threshold": bundle["threshold"],
@@ -238,7 +227,6 @@ def main():
     if args.mode == "train":
         report = train()
         print(f"분할 크기: {report['split_sizes']}")
-        print(f"학습 세트 제외: {report['excluded_from_train']}")
         for name, metrics in report["validation"].items():
             print_metrics(f"검증 세트 - {name}", metrics)
         print(f"\n선택된 모델: {report['selected_model']} (임계값 {report['threshold']})")
