@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+/models/weights/.training.lock
+/models/weights/.current.pending.json
+/models/weights/.pending-*/
+/models/reports/.pending-*/
+/frontend/node_modules/
+/frontend/dist/
+.env
+.env.*
+!.env.example

@@ -1,0 +1,12 @@
+# CPU 전용 PyTorch로 GPU가 없는 팀원도 같은 환경에서 실행한다.
+--extra-index-url https://download.pytorch.org/whl/cpu
+-c requirements.lock.txt
+torch==2.14.1+cpu
+filelock==4.0.12
+numpy==2.5.3
+scikit-learn==1.9.1
+fastapi==0.142.2
+pydantic==2.13.5
+uvicorn==0.54.0
+httpx==0.28.1
+swagger-ui-bundle-v2==5.31.0

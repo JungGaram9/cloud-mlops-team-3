@@ -1,0 +1,75 @@
+name: classroom-occupancy
+
+# 루트 .env는 Compose가 포트 치환에 자동 사용한다.
+# 서비스 환경 변수는 예제 기본값 위에 선택적인 .env 값을 적용한다.
+x-environment: &environment
+  - path: .env.example
+    required: true
+  - path: .env
+    required: false
+
+services:
+  trainer:
+    image: classroom-occupancy-api
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: *environment
+    user: "0:0"
+    command: ["python", "-m", "models.train"]
+    volumes:
+      - ./backend:/app/backend:ro
+      - ./models:/app/models
+      - ./data:/app/data:ro
+    tmpfs:
+      - /tmp
+
+  api:
+    image: classroom-occupancy-api
+    pull_policy: never
+    env_file: *environment
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    init: true
+    command: ["python", "-m", "uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./backend:/app/backend:ro
+      - ./models:/app/models:ro
+      - ./data:/app/data:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      trainer:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  web:
+    image: node:24-alpine
+    working_dir: /app
+    env_file: *environment
+    command: ["sh", "-c", "npm ci --prefix frontend --no-audit --no-fund && npm run dev --prefix frontend -- --host 0.0.0.0"]
+    ports:
+      - "127.0.0.1:${WEB_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app/frontend
+      - frontend_modules:/app/frontend/node_modules
+    environment:
+      API_PROXY_TARGET: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+volumes:
+  frontend_modules:
