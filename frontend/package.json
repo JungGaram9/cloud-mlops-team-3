@@ -1,0 +1,9 @@
+{
+  "name": "classroom-sensor-lab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"dev": "vite --port 5173 --strictPort"},
+  "dependencies": {"react": "19.3.0", "react-dom": "19.3.0"},
+  "devDependencies": {"@vitejs/plugin-react": "6.1.2", "vite": "8.3.3"}
+}

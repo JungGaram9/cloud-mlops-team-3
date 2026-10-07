@@ -1,0 +1,20 @@
+# 저장소 루트를 빌드 컨텍스트로 쓰되 모델 코드와 CSV만 허용한다.
+**
+!backend/
+!backend/**
+!models/
+!models/**
+!data/
+!data/training_dataset.csv
+!data/test_dataset.csv
+models/weights/.training.lock
+models/weights/.current.pending.json
+models/weights/.pending-*/
+models/reports/.pending-*/
+models/reports/**/*.jpg
+models/reports/**/verification.json
+models/reports/**/mock_result.json
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*

@@ -1,0 +1,63 @@
+{
+  "format_version": 1,
+  "version": "v1",
+  "framework": "pytorch",
+  "feature_mode": "with_light",
+  "architecture": "MLP 4 → 16 → 8 → 1, ReLU",
+  "created_at_utc": "2026-10-07T07:51:05.623987+00:00",
+  "features": [
+    "Temperature",
+    "Humidity",
+    "Light",
+    "CO2"
+  ],
+  "threshold": 0.5,
+  "random_state": 42,
+  "python_version": "3.12.15",
+  "packages": {
+    "torch": "2.14.1+cpu",
+    "numpy": "2.5.3",
+    "scikit-learn": "1.9.1"
+  },
+  "training_data": {
+    "rows": 8143,
+    "class_counts": {
+      "1": 1729,
+      "0": 6414
+    },
+    "first_timestamp": "2015-02-04 17:51:00",
+    "last_timestamp": "2015-02-10 09:33:00",
+    "duplicate_timestamps": 0,
+    "file": "data/training_dataset.csv",
+    "sha256": "99ada6edb491fe6a18a03ea3091146660edd18587a60ac7131bfe042e1783272"
+  },
+  "training_split": {
+    "rows": 6514,
+    "class_counts": {
+      "1": 1141,
+      "0": 5373
+    },
+    "first_timestamp": "2015-02-04 17:51:00",
+    "last_timestamp": "2015-02-09 06:23:59",
+    "duplicate_timestamps": 0
+  },
+  "validation_split": {
+    "rows": 1629,
+    "class_counts": {
+      "0": 1041,
+      "1": 588
+    },
+    "first_timestamp": "2015-02-09 06:24:59",
+    "last_timestamp": "2015-02-10 09:33:00",
+    "duplicate_timestamps": 0
+  },
+  "training": {
+    "max_epochs": 200,
+    "epochs_run": 115,
+    "best_epoch": 85,
+    "patience": 30,
+    "learning_rate": 0.01,
+    "best_validation_loss": 0.11410962790250778,
+    "selection": "시간순 검증 구간의 BCE 손실 최소화"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "Temperature": 22.5,
+  "Humidity": 45.0,
+  "Light": 450.0,
+  "CO2": 900.0,
+  "Hour": 14,
+  "DayOfWeek": 2
+}

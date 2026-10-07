@@ -1,0 +1,189 @@
+{
+  "format_version": 1,
+  "framework": "pytorch",
+  "feature_mode": "with_light",
+  "encoding": "cyclic-time-v1",
+  "encoded_features": [
+    "Temperature",
+    "Humidity",
+    "Light",
+    "CO2",
+    "HourSin",
+    "HourCos",
+    "DaySin",
+    "DayCos",
+    "IsWeekend"
+  ],
+  "architecture": "MLP 9 → 16 → 8 → 1, ReLU",
+  "created_at_utc": "2026-10-07T08:39:41.253434+00:00",
+  "features": [
+    "Temperature",
+    "Humidity",
+    "Light",
+    "CO2",
+    "Hour",
+    "DayOfWeek"
+  ],
+  "threshold": 0.5,
+  "random_state": 42,
+  "python_version": "3.12.15",
+  "packages": {
+    "torch": "2.14.1+cpu",
+    "numpy": "2.5.3",
+    "scikit-learn": "1.9.1"
+  },
+  "training_data": {
+    "rows": 8143,
+    "class_counts": {
+      "1": 1729,
+      "0": 6414
+    },
+    "first_timestamp": "2015-02-04 17:51:00",
+    "last_timestamp": "2015-02-10 09:33:00",
+    "duplicate_timestamps": 0,
+    "file": "data/training_dataset.csv",
+    "sha256": "99ada6edb491fe6a18a03ea3091146660edd18587a60ac7131bfe042e1783272"
+  },
+  "training_split": {
+    "rows": 6514,
+    "class_counts": {
+      "1": 1141,
+      "0": 5373
+    },
+    "first_timestamp": "2015-02-04 17:51:00",
+    "last_timestamp": "2015-02-09 06:23:59",
+    "duplicate_timestamps": 0
+  },
+  "validation_split": {
+    "rows": 1629,
+    "class_counts": {
+      "0": 1041,
+      "1": 588
+    },
+    "first_timestamp": "2015-02-09 06:24:59",
+    "last_timestamp": "2015-02-10 09:33:00",
+    "duplicate_timestamps": 0
+  },
+  "training": {
+    "max_epochs": 200,
+    "epochs_run": 173,
+    "best_epoch": 143,
+    "patience": 30,
+    "learning_rate": 0.01,
+    "best_validation_loss": 0.28821471333503723,
+    "selection": "시간순 검증 구간의 BCE 손실 최소화"
+  },
+  "test_data": {
+    "rows": 12417,
+    "class_counts": {
+      "1": 3021,
+      "0": 9396
+    },
+    "first_timestamp": "2015-02-02 14:19:00",
+    "last_timestamp": "2015-02-18 09:19:00",
+    "duplicate_timestamps": 0,
+    "file": "data/test_dataset.csv",
+    "sha256": "e6586b09fde4915260fa87ed83dece5a843c0fc93c551735e9130b31b96dadfc"
+  },
+  "data_audit": {
+    "shared_timestamps": 0,
+    "shared_records": 0,
+    "test_rows_before_training": 2665,
+    "test_rows_after_training": 9752
+  },
+  "quality_gate": {
+    "minimum_accuracy": 0.85,
+    "passed": true
+  },
+  "validation_metrics": {
+    "accuracy": 0.8453038674033149,
+    "precision": 1.0,
+    "recall": 0.5714285714285714,
+    "f1": 0.7272727272727273,
+    "roc_auc": 0.9996552895894188,
+    "average_precision": 0.9993676748796794,
+    "probability_mae": 0.18900637328624725,
+    "brier_score": 0.10069696605205536,
+    "confusion_matrix": [
+      [
+        1041,
+        0
+      ],
+      [
+        252,
+        336
+      ]
+    ]
+  },
+  "model_metrics": {
+    "accuracy": 0.9896110171539019,
+    "precision": 0.9682642487046632,
+    "recall": 0.9897384971863621,
+    "f1": 0.9788836143394991,
+    "roc_auc": 0.995477362309442,
+    "average_precision": 0.9736913354767021,
+    "probability_mae": 0.11321311444044113,
+    "brier_score": 0.04393260180950165,
+    "confusion_matrix": [
+      [
+        9298,
+        98
+      ],
+      [
+        31,
+        2990
+      ]
+    ]
+  },
+  "baseline": {
+    "description": "학습 구간의 사용 비율을 모든 평가 행에 동일하게 반환",
+    "training_occupancy_rate": 0.17516119128031932,
+    "metrics": {
+      "accuracy": 0.7567045179995168,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "roc_auc": 0.5,
+      "average_precision": 0.2432954820004832,
+      "probability_mae": 0.3332248203601544,
+      "brier_score": 0.18874507201057558,
+      "confusion_matrix": [
+        [
+          9396,
+          0
+        ],
+        [
+          3021,
+          0
+        ]
+      ]
+    }
+  },
+  "evaluation_notes": [
+    "같은 파일을 시간순 80/20으로 나누고 각 모델의 검증 손실로 가중치를 선택합니다.",
+    "평가 정답으로 가중치·임계값을 조정하지 않습니다.",
+    "평가 파일에는 학습 기간 이전·이후 시점이 함께 있습니다.",
+    "Hour와 DayOfWeek는 CSV date에서 추출하며 학습·예측이 같은 주기 변환을 사용합니다."
+  ],
+  "future_subset_metrics": {
+    "accuracy": 0.9944626743232158,
+    "precision": 0.9788766202592415,
+    "recall": 0.995119570522206,
+    "f1": 0.9869312681510165,
+    "roc_auc": 0.9968401705913796,
+    "average_precision": 0.9787461745503578,
+    "probability_mae": 0.09951060265302658,
+    "brier_score": 0.03729721158742905,
+    "confusion_matrix": [
+      [
+        7659,
+        44
+      ],
+      [
+        10,
+        2039
+      ]
+    ]
+  },
+  "version": "v3"
+}
