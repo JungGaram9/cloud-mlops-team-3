@@ -12,7 +12,8 @@ RUN --mount=type=cache,target=/root/.cache/pip python -m pip install -r backend/
 COPY data/training_dataset.csv data/test_dataset.csv /app/data/
 COPY backend/ /app/backend/
 COPY models/ /app/models/
-# 새로 내려받아도 로컬 모델 파일 없이 빌드한다. 조도 포함 정확도 85% 미만은 실패한다.
+COPY reports/ /app/reports/
+# 기존 기본 모델은 그대로 사용하며 준비 과정에서 학습 이력을 추가하지 않는다.
 RUN python -m models.train
 RUN python -m unittest backend.test_app -v
 

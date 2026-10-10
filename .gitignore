@@ -1,9 +1,13 @@
 __pycache__/
 *.py[cod]
 /models/weights/.training.lock
+/models/weights/.registration.lock
 /models/weights/.current.pending.json
 /models/weights/.pending-*/
-/models/reports/.pending-*/
+/reports/.pending-*/
+/reports/jobs/
+/reports/ui/
+**/.write-*.tmp
 /frontend/node_modules/
 /frontend/dist/
 .env
