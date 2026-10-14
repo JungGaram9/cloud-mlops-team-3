@@ -2,266 +2,372 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
-// 화면·예시 데이터·입력 설명을 한곳에서 관리하고 디자인은 styles.css에 둔다.
-const PRESETS = [
-  { id: 'bright', title: '밝은 실내', description: '수요일 오후 2시 · 조명이 켜진 실내', values: { Temperature: 23.1, Humidity: 27.2, Light: 430, CO2: 720, Hour: 14, DayOfWeek: 2 } },
-  { id: 'dark', title: '불 꺼진 실내', description: '일요일 새벽 2시 · 어두운 실내', values: { Temperature: 20.4, Humidity: 30, Light: 0, CO2: 450, Hour: 2, DayOfWeek: 6 } },
-  { id: 'co2', title: 'CO₂가 높은 실내', description: '금요일 오후 4시 · 밝고 높은 CO₂', values: { Temperature: 23, Humidity: 35, Light: 450, CO2: 1500, Hour: 16, DayOfWeek: 4 } },
+// 화면과 동작은 이 파일에서, 색상·배치·반응형은 styles.css에서 관리한다.
+const FEATURES = [
+  { key: 'Temperature', label: '기온', unit: '°C', min: 15, max: 35, step: 0.1, hint: '18° 서늘함 · 23° 보통 · 28° 따뜻함', description: '실내 공기 온도' },
+  { key: 'Humidity', label: '습도', unit: '%', min: 0, max: 100, step: 0.1, hint: '30% 건조 · 45% 보통 · 70% 습함', description: '공기의 상대습도' },
+  { key: 'Light', label: '조도', unit: 'lux', min: 0, max: 1000, step: 1, hint: '0 어두움 · 150 은은함 · 500 밝은 실내', description: '센서 위치의 밝기' },
+  { key: 'CO2', label: 'CO₂', unit: 'ppm', min: 350, max: 2500, step: 1, hint: '450 낮음 · 900 중간 · 1,500 높음', description: '호흡·환기의 영향을 받는 농도' },
+  { key: 'Hour', label: '시간', unit: '시', min: 0, max: 23, step: 1, hint: '0시 자정 · 12시 정오 · 18시 저녁', description: '측정 시각 · 24시간 주기' },
+  { key: 'DayOfWeek', label: '요일', unit: '', min: 0, max: 6, step: 1, hint: '월 0 · 화 1 · 수 2 · 목 3 · 금 4 · 토 5 · 일 6', description: '측정 요일 · 주말 여부 포함' },
 ];
+const LABELS = Object.fromEntries(FEATURES.map(item => [item.key, item.label]));
+const INPUT_LIMITS = { Temperature: { inputMin: -50, inputMax: 60 }, Humidity: { inputMin: 0, inputMax: 100 },
+  Light: { inputMin: 0, inputMax: 1000000 }, CO2: { inputMin: 0.000001, inputMax: 1000000 } };
 const DAYS = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'];
-
-const SENSORS = [
-  { key: 'Temperature', label: '기온', unit: '°C', icon: 'temperature', min: 15, max: 35, step: 0.1,
-    inputMin: -50, inputMax: 60, range: '입력 −50~60°C · 슬라이더 15~35°C',
-    references: ['18°C 서늘한 실내', '23°C 보통 실내', '28°C 따뜻한 실내'],
-    hint: '온도계로 측정한 공기 온도입니다. 개인마다 느끼는 정도는 다를 수 있어요.' },
-  { key: 'Humidity', label: '습도', unit: '%', icon: 'humidity', min: 0, max: 100, step: 0.1,
-    inputMin: 0, inputMax: 100, range: '입력 0~100%',
-    references: ['30% 건조한 편', '45% 보통 수준', '70% 습한 편'],
-    hint: '공기가 얼마나 건조하거나 습한지 나타내는 상대습도입니다.' },
-  { key: 'Light', label: '조도', unit: 'lux', icon: 'light', min: 0, max: 1000, step: 1,
-    inputMin: 0, inputMax: 1e6, range: '허용 0~100만 lux · 슬라이더 0~1,000',
-    references: ['0 lux 거의 어두움', '150 lux 은은한 밝기', '500 lux 밝은 실내'],
-    hint: '센서 위치에서 측정한 밝기입니다. 조명을 켜도 사람이 없을 수 있어요.' },
-  { key: 'CO2', label: 'CO₂', unit: 'ppm', icon: 'air', min: 350, max: 2500, step: 1,
-    inputMin: 1, inputMax: 1e6, range: '허용 0 초과~100만 ppm · 슬라이더 350~2,500',
-    references: ['450 ppm 낮은 농도', '900 ppm 중간 농도', '1,500 ppm 높은 농도'],
-    hint: '사람의 호흡과 환기에 영향을 받습니다. 직접 체감하기보다 센서로 확인하세요.' },
+const PRESETS = [
+  { name: '밝은 실내', hint: '수요일 오후 2시', values: { Temperature: 23.1, Humidity: 27.2, Light: 430, CO2: 720, Hour: 14, DayOfWeek: 2 } },
+  { name: '불 꺼진 실내', hint: '일요일 새벽 2시', values: { Temperature: 20.4, Humidity: 30, Light: 0, CO2: 450, Hour: 2, DayOfWeek: 6 } },
+  { name: 'CO₂가 높은 실내', hint: '금요일 오후 4시', values: { Temperature: 23, Humidity: 35, Light: 450, CO2: 1500, Hour: 16, DayOfWeek: 4 } },
 ];
+const DEFAULT_CONFIG = { name: '새 학습 실험', features: FEATURES.map(item => item.key), epochs: 200, learning_rate: 0.01,
+  batch_size: 0, hidden_layers: [16, 8], activation: 'relu', optimizer: 'adam', dropout: 0, weight_decay: 0,
+  validation_ratio: 0.2, patience: 30, threshold: 0.5, seed: 42, normalize: true, balance_classes: false,
+  compare_light: true, make_default: false };
+const STATUS = { queued: '준비 중', running: '학습 중', completed: '완료', failed: '실패', cancelled: '중지됨' };
+const percent = value => Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : '—';
+const decimal = value => Number.isFinite(value) ? value.toFixed(4) : '—';
+const date = value => value ? new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value)) : '—';
+const featureText = features => features.map(key => LABELS[key] || key).join(' · ');
+const modelLabel = mode => mode === 'with_light' ? '선택 모델' : '조도 제외 비교';
+const activeJob = job => job && ['queued', 'running'].includes(job.status);
 
-function Icon({ name, className = '' }) {
-  const paths = {
-    room: <><path d="M5 20V4h14v16M2 20h20M9 9h6M9 13h6" /><path d="M9 20v-3h6v3" /></>,
-    chart: <><path d="M4 4v16h16M8 16v-4M12 16V7M16 16v-6" /></>,
-    temperature: <><path d="M10 14.5V5a2 2 0 0 1 4 0v9.5a4 4 0 1 1-4 0Z" /><path d="M12 8v9" /></>,
-    humidity: <path d="M12 3s-6 7-6 11a6 6 0 0 0 12 0c0-4-6-11-6-11Z" />,
-    light: <><path d="M9 18h6M10 21h4M8 12a5 5 0 1 1 8 0c-1.5 1-1.5 2-1.5 3h-5c0-1 0-2-1.5-3Z" /><path d="M12 1v1M2 8h2M20 8h2M4 2l2 2M20 2l-2 2" /></>,
-    air: <><path d="M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h6" /></>,
-    arrow: <path d="m8 5 7 7-7 7M3 12h12" />,
-    check: <path d="m5 12 4 4L19 6" />,
-    info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
-    reset: <><path d="M4 9a8 8 0 1 1 0 6M4 3v6h6" /></>,
-    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" /></>,
-  };
-  return <svg className={`icon ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.room}</svg>;
-}
-
-const percent = (value, digits = 2) => Number.isFinite(value) ? (value * 100).toFixed(digits) : '—';
-const featureLabel = (name) => ({ Hour: '시간', DayOfWeek: '요일' })[name] || SENSORS.find((sensor) => sensor.key === name)?.label || name;
-const featureNames = (features) => features?.map(featureLabel).join(' · ') || '피처 확인 중';
-
-function reading(key, value) {
-  if (value === '') return '숫자를 입력해 주세요';
-  if (key === 'Temperature') return value < 20 ? '서늘한 편' : value < 25 ? '보통 실내 온도' : '따뜻한 편';
-  if (key === 'Humidity') return value < 35 ? '건조한 편' : value <= 60 ? '보통 습도' : '습한 편';
-  if (key === 'Light') return value < 10 ? '거의 어두움' : value < 200 ? '은은한 밝기' : value < 600 ? '밝은 실내' : '매우 밝은 편';
-  return value < 600 ? '비교적 낮은 농도' : value < 1000 ? '중간 농도' : value < 1500 ? '비교적 높은 농도' : '높은 농도';
-}
-
-async function api(path, body, signal) {
-  const response = await fetch(`/api${path}`, {
-    method: body ? 'POST' : 'GET', signal,
-    ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
-  });
+async function request(path, { signal, body, method } = {}) {
+  const response = await fetch(`/api${path}`, { signal, method: method || (body !== undefined ? 'POST' : 'GET'),
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined });
+  const data = await response.json();
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || '서버에 연결하지 못했습니다. API 실행 상태를 확인해 주세요.');
+    const detail = data.details?.map(item => `${item.field}: ${item.reason}`).join(', ');
+    throw new Error(`${data.error || '요청을 처리하지 못했습니다.'}${detail ? ` (${detail})` : ''}`);
   }
-  return response.json();
+  return data;
 }
 
-function Sensor({ sensor, value, excluded, onChange }) {
-  return <fieldset className={`sensor ${excluded ? 'sensor--excluded' : ''}`}>
-    <legend className="sr-only">{sensor.label} 입력</legend>
-    <div className="sensor-heading">
-      <div className="sensor-name"><span className="sensor-icon"><Icon name={sensor.icon} /></span><div><label htmlFor={sensor.key}>{sensor.label}</label><small>{sensor.range}</small></div></div>
-      <div className="number-control"><input id={sensor.key} type="number" required aria-label={`${sensor.label} 숫자 입력`} min={sensor.inputMin} max={sensor.inputMax} step="any" value={value} disabled={excluded} onChange={(event) => onChange(event.target.value === '' ? '' : Number(event.target.value))} /><span>{sensor.unit}</span></div>
-    </div>
-    <div className="sensor-reading"><span>{reading(sensor.key, value)}</span>{excluded && <b>이 모델에서는 제외</b>}</div>
-    <input className="sensor-slider" type="range" aria-label={`${sensor.label} 슬라이더`} min={sensor.min} max={sensor.max} step={sensor.step} value={Math.min(sensor.max, Math.max(sensor.min, Number(value)))} disabled={excluded} onChange={(event) => onChange(Number(event.target.value))} />
-    <div className="sensor-references">{sensor.references.map((reference) => <span key={reference}>{reference}</span>)}</div>
-    <p className="sensor-hint">{sensor.hint}</p>
-  </fieldset>;
+function Icon({ name, size = 20 }) {
+  const paths = {
+    lab: <><path d="M9 3h6m-5 0v7l-5 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3M8 15h8" /><path d="M10 18h.01M14 17h.01" /></>,
+    dashboard: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="11" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="18" width="7" height="3" rx="1" /></>,
+    sliders: <><path d="M4 7h5m5 0h6M4 17h9m5 0h2" /><circle cx="11.5" cy="7" r="2.5" /><circle cx="15.5" cy="17" r="2.5" /></>,
+    train: <><path d="M4 19V5m0 14h16M8 14l4-5 4 3 4-7" /><path d="M16 5h4v4" /></>,
+    arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
+    play: <path d="m8 5 11 7-11 7Z" />,
+    refresh: <><path d="M20 11a8 8 0 0 0-14-5L3 9m0-5v5h5M4 13a8 8 0 0 0 14 5l3-3m0 5v-5h-5" /></>,
+    file: <><path d="M14 3H5v18h14V8Zm0 0v5h5M8 12h8M8 16h6" /></>,
+    check: <path d="m5 12 4 4L19 6" />,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  };
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.lab}</svg>;
 }
 
-function AccuracyCard({ title, description, report, selected, onClick }) {
-  const accuracy = report?.model_metrics.accuracy;
-  return <button className={`accuracy-card ${selected ? 'accuracy-card--selected' : ''}`} onClick={onClick} aria-pressed={selected}>
-    <span className="accuracy-card-title"><span>{title}</span><span className="selection-dot">{selected && <Icon name="check" />}</span></span>
-    <span className="accuracy-number">{percent(accuracy)}<small>%</small></span>
-    <span className="accuracy-description">{description}</span>
-    <progress value={(accuracy || 0) * 100} max="100" aria-label={`${title} 평가 정확도`} />
-    <span className="accuracy-bottom"><span>평가 데이터 기준</span><b>{report ? (report.quality_gate.passed ? '85% 기준 충족' : '85% 기준 미달') : '불러오는 중'}</b></span>
-  </button>;
+function Switch({ label, checked, onChange, disabled, description }) {
+  return <div className={`switch-row ${disabled ? 'muted' : ''}`}><div><b>{label}</b>{description && <small>{description}</small>}</div>
+    <button type="button" role="switch" aria-label={label} aria-checked={checked} disabled={disabled} className={`switch ${checked ? 'on' : ''}`} onClick={() => onChange(!checked)}><span /></button></div>;
+}
+
+function RangeControl({ label, value, onChange, min, max, inputMin = min, inputMax = max, step = 1, numberStep = step, hint, suffix = '', disabled = false, format }) {
+  return <div className="range-control"><div className="control-heading"><label>{label}</label>
+    <div className="numeric"><input type="number" aria-label={`${label} 숫자 입력`} min={inputMin} max={inputMax} step={numberStep} required value={value} disabled={disabled}
+      onChange={event => onChange(event.target.value === '' ? '' : Number(event.target.value))} /><span>{suffix}</span></div></div>
+    <input type="range" aria-label={`${label} 슬라이더`} min={min} max={max} step={step} value={value === '' ? min : value} disabled={disabled} onChange={event => onChange(Number(event.target.value))} />
+    <div className="range-caption"><span>{hint}</span>{format && <b>{format(value)}</b>}</div></div>;
+}
+
+function LossChart({ models = {}, curves = {}, compact = false, emptyMessage = '학습이 시작되면 손실 곡선을 표시합니다.' }) {
+  const [mode, setMode] = useState('with_light');
+  const modes = [...new Set([...Object.keys(models), ...Object.keys(curves)])];
+  const selected = modes.includes(mode) ? mode : modes[0];
+  const points = curves[selected] || models[selected]?.training?.history || [];
+  const finite = points.filter(point => Number.isFinite(point.training_loss) && Number.isFinite(point.validation_loss));
+  const maxLoss = Math.max(0.01, ...finite.flatMap(point => [point.training_loss, point.validation_loss]));
+  const maxEpoch = Math.max(1, finite.at(-1)?.epoch || 1);
+  const x = point => 42 + point.epoch / maxEpoch * 510;
+  const y = value => 190 - value / maxLoss * 155;
+  return <div className={`loss-chart ${compact ? 'compact' : ''}`}><div className="section-heading"><div><h3>학습 곡선</h3><p>검증 손실이 낮을수록 정답에 가까운 확률입니다.</p></div>
+    {modes.length > 1 && <select aria-label="손실 곡선 모델" value={selected} onChange={event => setMode(event.target.value)}>{modes.map(key => <option key={key} value={key}>{modelLabel(key)}</option>)}</select>}</div>
+    {finite.length ? <><div className="chart-legend"><span><i className="dot green" />학습 손실</span><span><i className="dot blue" />검증 손실</span></div>
+      <svg viewBox="0 0 580 225" role="img" aria-label="학습 및 검증 손실 곡선">
+        {[0, 0.5, 1].map(fraction => <g key={fraction}><line x1="42" y1={y(maxLoss * fraction)} x2="552" y2={y(maxLoss * fraction)} className="grid-line" /><text x="32" y={y(maxLoss * fraction) + 4} textAnchor="end">{(maxLoss * fraction).toFixed(2)}</text></g>)}
+        <polyline points={finite.map(point => `${x(point)},${y(point.training_loss)}`).join(' ')} className="curve training" />
+        <polyline points={finite.map(point => `${x(point)},${y(point.validation_loss)}`).join(' ')} className="curve validation" />
+        <text x="42" y="215">1회</text><text x="552" y="215" textAnchor="end">{maxEpoch}회</text>
+      </svg></> : <div className="empty-chart"><Icon name="train" size={28} /><p>{emptyMessage}</p></div>}</div>;
+}
+
+function MetricGrid({ metrics }) {
+  return <div className="metric-grid">{[['정확도', metrics?.accuracy], ['정밀도', metrics?.precision], ['재현율', metrics?.recall], ['F1', metrics?.f1]].map(([name, value]) => <div key={name}><small>{name}</small><strong>{name === 'F1' ? decimal(value) : percent(value)}</strong></div>)}</div>;
+}
+
+function FeatureTags({ features = [] }) {
+  return <div className="feature-tags">{features.map(key => <span key={key}>{LABELS[key] || key}</span>)}</div>;
+}
+
+function downloadReport(report) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a'); link.href = url; link.download = `${report.model_version}-training.json`; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function ReportPanel({ report, version, loading, onExperiment, onReuse, onActivate, isDefault, activating }) {
+  const modes = Object.entries(report?.models || {});
+  return <section className="panel report-panel"><div className="section-heading"><div><span className="eyebrow">모델 기록</span><h2>{version || '모델 선택'} 학습 보고서</h2></div><Icon name="file" /></div>
+    {loading ? <p className="empty">보고서를 불러오는 중입니다.</p> : !report ? <p className="empty">버전을 선택하면 학습 설정과 실제 평가 결과를 볼 수 있습니다.</p> : <>
+      {report.legacy && <p className="notice">{report.note}</p>}
+      {report.config && <div className="report-title"><h3>{report.config.name}</h3><small>학습 {report.duration_seconds?.toFixed(1)}초 · {date(report.created_at_utc)}</small></div>}
+      <div className="report-actions"><button className="button secondary" onClick={onExperiment}>예측 실험 <Icon name="arrow" size={16} /></button><button className="button secondary" onClick={onReuse}>설정 불러오기</button>
+        <button className="button secondary" disabled={isDefault || activating} onClick={onActivate}>{isDefault ? '기본 모델 사용 중' : activating ? '적용 중…' : '기본 모델로 사용'}</button>
+        <button className="text-button" onClick={() => downloadReport(report)}>JSON 내려받기</button></div>
+      {modes.map(([mode, model]) => <div className="model-report" key={mode}><div className="section-heading"><h3>{modelLabel(mode)}</h3><span className={`badge ${model.quality_gate?.passed ? 'success' : 'neutral'}`}>{model.quality_gate?.passed ? '85% 기준 충족' : '85% 기준 미달'}</span></div>
+        <FeatureTags features={model.features} /><MetricGrid metrics={model.model_metrics} /><p className="architecture">{model.architecture} · 임계값 {model.threshold}</p>
+        <div className="confusion"><b>혼동 행렬</b><span>실제 비어 있음 → 예측 비어 있음 / 사용 중: {model.model_metrics.confusion_matrix[0].join(' / ')}</span><span>실제 사용 중 → 예측 비어 있음 / 사용 중: {model.model_metrics.confusion_matrix[1].join(' / ')}</span></div>
+        {model.future_subset_metrics && <p className="small-note">학습 기간 이후 구간 정확도 {percent(model.future_subset_metrics.accuracy)} · 전체 평가 정확도와 별도로 확인하세요.</p>}
+      </div>)}
+      <LossChart models={report.models} emptyMessage={report.legacy ? '기존 버전에는 손실 곡선이 저장되어 있지 않습니다.' : undefined} />
+      <div className="section-heading"><h3>하이퍼파라미터</h3><span className="small-note">선택 모델 기준</span></div>
+      <dl className="parameter-grid">{(() => { const model = report.models.with_light; const config = report.config || model.training; return [
+        ['옵티마이저', config.optimizer?.toUpperCase()], ['학습률', config.learning_rate], ['최대 에포크', config.epochs ?? config.max_epochs],
+        ['실행 / 최적 에포크', `${model.training.epochs_run} / ${model.training.best_epoch}`], ['배치 크기', config.batch_size === 0 ? '전체 배치' : config.batch_size],
+        ['은닉층', config.hidden_layers?.join(' → ')], ['활성화', config.activation], ['드롭아웃', config.dropout], ['가중치 감쇠', config.weight_decay],
+        ['검증 비율', config.validation_ratio == null ? null : percent(config.validation_ratio)], ['조기 종료 대기', config.patience === 0 ? '끄기' : config.patience],
+        ['시드', config.seed ?? model.random_state], ['표준화', config.normalize == null ? null : config.normalize ? '사용' : '제외'],
+        ['클래스 균형', config.balance_classes == null ? null : config.balance_classes ? '보정' : '원본'],
+        ['학습 / 검증 / 평가 행', `${model.training_split.rows.toLocaleString()} / ${model.validation_split.rows.toLocaleString()} / ${model.test_data.rows.toLocaleString()}`],
+        ['검증 최저 손실', decimal(model.training.best_validation_loss)],
+      ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value ?? '기록 없음'}</dd></div>); })()}</dl>
+      <p className="small-note">학습은 시간순으로 분할합니다. 별도 평가 파일에는 학습 기간 이전·이후 기록이 함께 있습니다. 같은 평가 파일로 반복 실험한 결과는 독립적인 최종 성능 검증이 아닙니다.</p>
+    </>}
+  </section>;
+}
+
+function PredictionForm({ values, setValues, enabled, presets = true, disabled = false }) {
+  return <><div className="section-heading"><div><h3>센서 입력</h3><p>값을 조절하고 해당 모델의 예측을 확인하세요.</p></div></div>
+    {presets && <div className="presets">{PRESETS.map(preset => <button type="button" className="preset" key={preset.name} disabled={disabled} onClick={() => setValues({ ...preset.values })}><b>{preset.name}</b><small>{preset.hint}</small></button>)}</div>}
+    <div className="sensor-grid">{FEATURES.map(feature => {
+      const excluded = enabled && !enabled.includes(feature.key);
+      return <div className={`sensor-field ${excluded ? 'excluded' : ''}`} key={feature.key}><RangeControl label={feature.label} value={values[feature.key]}
+        {...INPUT_LIMITS[feature.key]} min={feature.min} max={feature.max} step={feature.step} numberStep={['Hour', 'DayOfWeek'].includes(feature.key) ? 1 : 'any'} suffix={feature.unit} hint={excluded ? '선택한 모델에서 사용하지 않는 피처' : feature.hint}
+        disabled={disabled || excluded} format={feature.key === 'DayOfWeek' ? value => DAYS[value] : undefined}
+        onChange={value => setValues(previous => ({ ...previous, [feature.key]: value }))} /></div>;
+    })}</div></>;
 }
 
 function App() {
-  const [mode, setMode] = useState('with_light');
-  const [page, setPage] = useState('experiment');
-  const [versions, setVersions] = useState(null);
-  const [selectedVersion, setSelectedVersion] = useState('');
-  const [preset, setPreset] = useState(PRESETS[0].id);
-  const [sensors, setSensors] = useState({ ...PRESETS[0].values });
-  const [comparison, setComparison] = useState(null);
-  const [predictions, setPredictions] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState('dashboard');
+  const [registry, setRegistry] = useState({ versions: [], current_version: '' });
+  const [options, setOptions] = useState(null);
+  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [values, setValues] = useState({ ...PRESETS[0].values });
+  const [selected, setSelected] = useState('');
+  const [report, setReport] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [jobs, setJobs] = useState([]);
+  const [job, setJob] = useState(null);
   const [error, setError] = useState('');
-  const requestRef = useRef(null);
-  const generation = useRef(0);
-  const lightEnabled = mode === 'with_light';
-  const report = comparison?.modes[mode];
-  const prediction = predictions?.[mode];
-  const currentVersion = comparison?.model_version || versions?.current_version || '—';
-  const versionPair = versions?.versions.find((item) => item.version === selectedVersion);
-  const timeEnabled = Boolean(report?.features.includes('Hour'));
+  const [message, setMessage] = useState('');
+  const [starting, setStarting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [predicting, setPredicting] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [predictions, setPredictions] = useState(null);
+  const [previewVersion, setPreviewVersion] = useState('');
+  const [activeMode, setActiveMode] = useState('with_light');
+  const handledJob = useRef(new Set());
+  const predictionController = useRef(null);
+  const busy = starting || activeJob(job);
 
-  function validInput(values) {
-    return SENSORS.every((sensor) => Number.isFinite(values[sensor.key]) && values[sensor.key] >= sensor.inputMin && (sensor.inputMax === undefined || values[sensor.key] <= sensor.inputMax))
-      && Number.isInteger(values.Hour) && values.Hour >= 0 && values.Hour <= 23
-      && Number.isInteger(values.DayOfWeek) && values.DayOfWeek >= 0 && values.DayOfWeek <= 6;
-  }
-
-  async function predict(values) {
-    if (!validInput(values) || !comparison) {
-      setError('모델 연결과 센서값·시간·요일의 허용 범위를 확인해 주세요.');
-      return;
-    }
-    requestRef.current?.abort();
-    const controller = new AbortController();
-    requestRef.current = controller;
-    const current = ++generation.current;
-    setLoading(true);
-    setError('');
-    try {
-      const result = await api(`/compare?version=${comparison.model_version}`, values, controller.signal);
-      if (current === generation.current) setPredictions(result);
-    } catch (failure) {
-      if (failure.name !== 'AbortError' && current === generation.current) setError(failure.message);
-    } finally {
-      if (current === generation.current) setLoading(false);
-    }
-  }
-
-  async function useModelPair(version, values, openExperiment = true) {
-    requestRef.current?.abort();
-    const controller = new AbortController();
-    requestRef.current = controller;
-    const current = ++generation.current;
-    setLoading(true);
-    setError('');
-    setPredictions(null);
-    try {
-      const [evaluation, result] = await Promise.all([
-        api(`/comparison?version=${version}`, null, controller.signal),
-        api(`/compare?version=${version}`, values, controller.signal),
-      ]);
-      if (current === generation.current) {
-        setComparison(evaluation);
-        setPredictions(result);
-        setSelectedVersion(version);
-        if (openExperiment) setPage('experiment');
-      }
-    } catch (failure) {
-      if (failure.name !== 'AbortError' && current === generation.current) setError(failure.message);
-    } finally {
-      if (current === generation.current) setLoading(false);
-    }
+  async function refresh() {
+    const [versions, history] = await Promise.all([request('/versions'), request('/training/jobs')]);
+    setRegistry(versions); setJobs(history.jobs);
+    const running = history.jobs.find(activeJob);
+    if (running) setJob(previous => ({ ...running, curves: previous?.id === running.id ? previous.curves : {} }));
+    return { versions, history: history.jobs };
   }
 
   useEffect(() => {
     const controller = new AbortController();
-    api('/versions', null, controller.signal).then((result) => {
-      setVersions(result);
-      setSelectedVersion(result.current_version);
-      useModelPair(result.current_version, PRESETS[0].values, false);
-    }).catch((failure) => {
-      if (failure.name !== 'AbortError') setError(failure.message);
-    });
-    return () => { controller.abort(); requestRef.current?.abort(); };
+    Promise.all([request('/versions', { signal: controller.signal }), request('/training/jobs', { signal: controller.signal }), request('/training/options', { signal: controller.signal })])
+      .then(async ([versions, history, catalog]) => {
+        setRegistry(versions); setSelected(versions.current_version); setJobs(history.jobs); setOptions(catalog); setConfig(catalog.defaults);
+        const recent = history.jobs.find(activeJob) || history.jobs[0]; setJob(recent || null);
+        if (activeJob(recent)) setConfig(recent.config);
+        else if (recent) {
+          handledJob.current.add(recent.id);
+          const detail = await request(`/training/jobs/${recent.id}`, { signal: controller.signal });
+          setJob(previous => previous?.id === recent.id ? detail : previous);
+        }
+      }).catch(cause => { if (cause.name !== 'AbortError') setError(cause.message); });
+    return () => { controller.abort(); predictionController.current?.abort(); };
   }, []);
 
-  function editSensor(key, value) {
-    requestRef.current?.abort();
-    generation.current += 1;
-    setLoading(false);
-    setSensors((previous) => ({ ...previous, [key]: value }));
-    setPreset('');
+  useEffect(() => {
+    if (!selected) return;
+    const controller = new AbortController();
+    predictionController.current?.abort(); setPredictions(null); setReport(null); setReportLoading(true); setActiveMode('with_light');
+    request(`/versions/${selected}/training`, { signal: controller.signal }).then(setReport)
+      .catch(cause => { if (cause.name !== 'AbortError') setError(cause.message); })
+      .finally(() => { if (!controller.signal.aborted) setReportLoading(false); });
+    return () => controller.abort();
+  }, [selected]);
+
+  useEffect(() => {
+    predictionController.current?.abort();
     setPredictions(null);
-    setError('');
+  }, [values]);
+
+  useEffect(() => {
+    if (!activeJob(job)) return;
+    const controller = new AbortController();
+    let pending = false;
+    const poll = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const next = await request(`/training/jobs/${job.id}`, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setJob(next);
+        if (!activeJob(next) && !handledJob.current.has(next.id)) {
+          handledJob.current.add(next.id);
+          const data = await refresh();
+          if (next.status === 'completed') {
+            setSelected(next.version); setMessage(`${next.version} 학습을 완료했습니다. 보고서와 예측 실험에서 확인하세요.`);
+          } else if (next.status === 'failed') setError(next.error || '학습에 실패했습니다. 설정을 확인하고 다시 실행하세요.');
+          else setMessage('학습을 중지했습니다. 새 모델 버전은 만들지 않았습니다.');
+          setRegistry(data.versions);
+        }
+      } catch (cause) { if (cause.name !== 'AbortError') setError(`학습 상태를 불러오지 못했습니다. ${cause.message}`); }
+      finally { pending = false; }
+    };
+    const timer = setInterval(poll, 1200); poll();
+    return () => { controller.abort(); clearInterval(timer); };
+  }, [job?.id, job?.status]);
+
+  function update(key, value) { setConfig(previous => ({ ...previous, [key]: value })); }
+  function toggleFeature(key) { setConfig(previous => ({ ...previous, features: FEATURES.map(item => item.key).filter(name => name === key ? !previous.features.includes(name) : previous.features.includes(name)) })); }
+
+  async function train(event) {
+    event.preventDefault(); if (busy || !config.features.length) return;
+    setStarting(true); setError(''); setMessage('');
+    try {
+      const next = await request('/training/jobs', { body: config }); setJob(next); setJobs(previous => [next, ...previous]);
+    } catch (cause) {
+      setError(cause.message);
+      try { const data = await refresh(); const running = data.history.find(activeJob); if (running) setJob(running); } catch { /* 최초 오류 메시지를 유지한다. */ }
+    } finally { setStarting(false); }
   }
 
-  function choosePreset(item) {
-    setPreset(item.id);
-    setSensors({ ...item.values });
-    setPredictions(null);
-    predict(item.values);
+  async function cancel() {
+    if (!activeJob(job)) return;
+    setCancelling(true); setError('');
+    try { await request(`/training/jobs/${job.id}/cancel`, { method: 'POST' }); setJob(previous => ({ ...previous, cancel_requested: true })); }
+    catch (cause) { setError(cause.message); }
+    finally { setCancelling(false); }
   }
 
-  return <div className="app-shell">
-    <aside className="sidebar">
-      <a className="brand" href="#top"><span className="brand-mark"><Icon name="room" /></span><span>공간 실험실<small>강의실 센서 프로젝트</small></span></a>
-      <div className="sidebar-section-label">실험 워크스페이스</div>
-      <nav aria-label="화면 탐색"><button className={`nav-item ${page === 'experiment' ? 'nav-item--active' : ''}`} onClick={() => setPage('experiment')} aria-current={page === 'experiment' ? 'page' : undefined}><Icon name="room" />센서 실험</button><button className={`nav-item ${page === 'versions' ? 'nav-item--active' : ''}`} onClick={() => setPage('versions')} aria-current={page === 'versions' ? 'page' : undefined}><Icon name="chart" />모델 버전 관리</button><a className="nav-item" href="/api/docs" target="_blank" rel="noreferrer"><Icon name="info" />API 사용 안내</a></nav>
-      <div className="sidebar-note"><span className="tiny-dot" />PyTorch {currentVersion}<p>같은 공간, 다른 입력.<br />센서가 결과에 미치는 영향을<br />직접 확인해 보세요.</p></div>
-      <div className="sidebar-footer">클라우드 MLOps · 3팀</div>
-    </aside>
+  async function predict(event) {
+    event?.preventDefault(); if (!selected || reportLoading || !report) return;
+    predictionController.current?.abort(); const controller = new AbortController(); predictionController.current = controller;
+    setPredicting(true); setError('');
+    try {
+      const result = await request(`/compare?version=${selected}`, { body: values, signal: controller.signal });
+      if (!controller.signal.aborted) { setPredictions(result); setPreviewVersion(selected); }
+    } catch (cause) { if (cause.name !== 'AbortError') setError(cause.message); }
+    finally { if (predictionController.current === controller) setPredicting(false); }
+  }
 
-    <main id="top">
-      <header className="topbar"><span>강의실 관리 <span className="breadcrumb-separator">/</span> <b>{page === 'versions' ? '모델 버전 관리' : '센서 실험'}</b></span><span className={`connection ${comparison ? 'connection--ready' : ''}`}><span className="tiny-dot" />{comparison ? '모델 연결됨' : '모델 연결 확인 중'}</span></header>
-      <div className="workspace">
-        {error && <div className="error-banner" role="alert"><Icon name="info" />{error}<button onClick={() => window.location.reload()}>다시 연결</button></div>}
-        {page === 'versions' ? <>
-          <div className="page-heading"><div><div className="eyebrow">모델 변경이 버전을 만듭니다</div><h1>모델 버전 관리</h1><p>각 모델 버전은 조도 포함·제외 두 가중치를 한 쌍으로 보존합니다.</p></div><span className="version-tag">현재 실험 <b>{currentVersion}</b></span></div>
-          <div className="version-overview"><Icon name="room" /><div><b>{currentVersion} 모델 쌍으로 실험하고 있습니다</b><p>모델이 같으면 재학습해도 버전을 재사용합니다. 화면·폴더 변경은 모델 버전을 만들지 않습니다.</p></div><span className="pair-badge">모델 2개 / 쌍</span></div>
-          <section className="version-list" aria-label="모델 쌍 버전 목록">{versions?.versions.map((item) => <button key={item.version} className={`version-button ${selectedVersion === item.version ? 'version-button--selected' : ''}`} aria-pressed={selectedVersion === item.version} onClick={() => setSelectedVersion(item.version)}><span className="version-symbol">{item.version}</span><span><b>PyTorch {item.version} 모델 쌍</b><small>{new Date(item.created_at_utc).toLocaleString('ko-KR')} · 평가 {item.test_rows.toLocaleString('ko-KR')}건{item.same_model_as && ` · ${item.same_model_as}과 동일한 모델의 기존 이력`}</small></span><span className={`version-status ${item.version === currentVersion ? 'version-status--current' : ''}`}>{item.version === currentVersion ? '실험 중' : item.current ? '기본 모델' : '저장됨'}</span></button>) || <p>버전 목록을 불러오는 중입니다.</p>}</section>
-          {versionPair && <section className="version-details" aria-labelledby="version-heading"><div className="section-heading"><div><div className="section-eyebrow">선택한 모델 쌍</div><h2 id="version-heading">{versionPair.version} · 조도 포함 + 조도 제외</h2></div><button className="use-version-button" disabled={!versionPair.ready || loading || !validInput(sensors)} onClick={() => useModelPair(versionPair.version, sensors)}>이 모델 쌍으로 실험하기<Icon name="arrow" /></button></div><div className="version-model-grid">{versionPair.models.map((item) => <article className="version-model" key={item.mode}><div className="section-eyebrow">{item.mode === 'with_light' ? '모델 01' : '모델 02'}</div><h3>{item.mode === 'with_light' ? '조도 피처 포함' : '조도 피처 제외'}</h3><p className="version-features">{featureNames(item.features)}</p><dl><div><dt>평가 정확도</dt><dd>{percent(item.metrics.accuracy)}%</dd></div><div><dt>F1 점수</dt><dd>{item.metrics.f1.toFixed(4)}</dd></div><div><dt>85% 기준</dt><dd>{item.quality_gate.passed ? '충족' : '미달'}</dd></div><div><dt>체크포인트</dt><dd>{item.checkpoint_exists ? '저장됨' : '가중치 없음'}</dd></div></dl><p className="version-architecture">{item.architecture}</p></article>)}</div><div className="pair-evaluation"><span>같은 평가 데이터에서 조도 포함 시 정확도 차이</span><b>{versionPair.accuracy_difference_percentage_points >= 0 ? '+' : ''}{versionPair.accuracy_difference_percentage_points.toFixed(2)}%p</b></div><p className="version-footnote">피처·입력 변환·표준화·가중치·임계값이 달라지면 새 버전으로 저장합니다. 기존 버전의 두 가중치를 덮어쓰지 않습니다. 위 버튼은 이 브라우저의 실험 모델 쌍을 선택합니다.</p></section>}
-        </> : <>
-        <div className="page-heading"><div><div className="eyebrow">센서로 읽는 공간</div><h1>강의실 사용 여부 실험</h1><p>센서값을 바꿔 예측하고, 조도 피처가 정확도에 미치는 영향을 비교해 보세요.</p></div><span className="version-tag">PyTorch <b>{currentVersion}</b></span></div>
-        <section className="feature-panel" aria-labelledby="feature-heading">
-          <div className="feature-icon"><Icon name="light" /></div><div className="feature-copy"><div className="section-eyebrow">이번 실험의 변수</div><h2 id="feature-heading">조도 피처를 사용할까요?</h2><p>스위치를 바꾸면 조도를 포함하거나 제외해 학습한 모델로 전환됩니다.</p></div>
-          <div className="feature-control"><span>{lightEnabled ? '조도 피처 포함' : '조도 피처 제외'}</span><button className="switch" role="switch" aria-label="조도 피처 사용" aria-checked={lightEnabled} onClick={() => setMode(lightEnabled ? 'without_light' : 'with_light')}><span /></button></div>
-        </section>
+  async function activate() {
+    setActivating(true); setError('');
+    try { await request(`/versions/${selected}/activate`, { method: 'POST' }); await refresh(); setMessage(`${selected}를 기본 예측 모델로 적용했습니다.`); }
+    catch (cause) { setError(cause.message); }
+    finally { setActivating(false); }
+  }
 
-        <section id="evaluation" className="evaluation-section" aria-labelledby="evaluation-heading">
-          <div className="section-heading"><h2 id="evaluation-heading">조도의 차이, 정확도로 확인하기</h2><span>동일한 평가 데이터 <b>{comparison ? comparison.test_rows.toLocaleString('ko-KR') : '—'}건</b></span></div>
-          <div className="accuracy-grid"><AccuracyCard title="조도 피처 포함" description={featureNames(comparison?.modes.with_light.features)} report={comparison?.modes.with_light} selected={lightEnabled} onClick={() => setMode('with_light')} /><AccuracyCard title="조도 피처 제외" description={featureNames(comparison?.modes.without_light.features)} report={comparison?.modes.without_light} selected={!lightEnabled} onClick={() => setMode('without_light')} /><div className="difference-card"><span className="section-eyebrow">조도를 포함했을 때</span><div className="difference-number">{comparison ? (comparison.accuracy_difference_percentage_points >= 0 ? '+' : '') + comparison.accuracy_difference_percentage_points.toFixed(2) : '—'}<small>%p</small></div><p>두 모델의 평가 정확도 차이</p><span className="difference-note"><Icon name="info" />센서 입력을 바꿔도<br />평가 정확도는 변하지 않아요.</span></div></div>
-        </section>
+  function reuse() {
+    const next = report?.config || { ...options.defaults, features: report.models.with_light.features };
+    setConfig({ ...next, name: `${selected} 기반 실험`, make_default: false }); setTab('training');
+    setMessage(report.config ? `${selected}의 학습 설정을 불러왔습니다.` : `${selected}의 피처를 불러왔습니다. 저장되지 않은 설정은 기본값으로 시작합니다.`);
+  }
 
-        <section id="experiment" className="experiment-section">
-          <div className="sensor-panel">
-            <div className="section-heading"><div><div className="section-eyebrow">직접 입력해 보기</div><h2>지금 강의실은 어떤 환경인가요?</h2></div><button className="reset-button" disabled={loading || !comparison} onClick={() => choosePreset(PRESETS[0])} aria-label="센서값 초기화"><Icon name="reset" /></button></div>
-            <div className="preset-label">처음이라면, 예시 데이터로 시작하세요</div><div className="preset-grid">{PRESETS.map((item) => <button className={`preset-button ${preset === item.id ? 'preset-button--selected' : ''}`} disabled={loading || !comparison} key={item.id} onClick={() => choosePreset(item)} aria-pressed={preset === item.id}><Icon name={item.id === 'co2' ? 'air' : 'light'} /><b>{item.title}</b><small>{item.description}</small></button>)}</div>
-            <form onSubmit={(event) => { event.preventDefault(); predict(sensors); }}>
-              <fieldset className="input-fields" disabled={loading || !comparison}>
-              <div className={`time-inputs ${!timeEnabled ? 'time-inputs--excluded' : ''}`}><div className="time-heading"><Icon name="clock" /><b>언제 측정한 값인가요?</b><span>{timeEnabled ? '학습·예측에 사용' : '이전 모델에서는 제외'}</span></div><div className="time-controls"><label htmlFor="Hour">시간 <small>0~23시</small><select id="Hour" aria-label="측정 시간" value={sensors.Hour} disabled={!timeEnabled} onChange={(event) => editSensor('Hour', Number(event.target.value))}>{Array.from({length:24}, (_, hour) => <option value={hour} key={hour}>{String(hour).padStart(2,'0')}시 · {hour < 12 ? '오전' : '오후'} {hour % 12 || 12}시</option>)}</select></label><label htmlFor="DayOfWeek">요일 <small>월 0~일 6</small><select id="DayOfWeek" aria-label="측정 요일" value={sensors.DayOfWeek} disabled={!timeEnabled} onChange={(event) => editSensor('DayOfWeek', Number(event.target.value))}>{DAYS.map((day,index) => <option value={index} key={day}>{day} · {index}</option>)}</select></label></div><p>측정한 공간의 시간과 요일을 선택하세요. 예: 수요일 오후 2시 = 시간 14, 요일 2. 날짜·예약 정보는 입력하지 않습니다.</p></div>
-              <div className="sensor-list">{SENSORS.map((sensor) => <Sensor key={sensor.key} sensor={sensor} value={sensors[sensor.key]} excluded={sensor.key === 'Light' && !lightEnabled} onChange={(value) => editSensor(sensor.key, value)} />)}</div>
-              </fieldset>
-              <button className="predict-button" disabled={loading || !comparison} type="submit">{loading ? '예측하고 있어요…' : '이 센서값으로 예측하기'}<Icon name="arrow" /></button>
-              <p className="input-footnote">예시 데이터는 가상의 측정값입니다. 센서값만으로 실제 사용 정답을 알 수는 없습니다.</p>
-            </form>
-          </div>
+  async function inspectJob(item) {
+    if (!activeJob(job) || item.id === job.id) {
+      try {
+        const detail = await request(`/training/jobs/${item.id}`);
+        setJob(previous => activeJob(previous) && previous.id !== item.id ? previous : detail);
+      } catch (cause) { setError(cause.message); }
+    }
+    if (item.version) { setSelected(item.version); setTab('dashboard'); }
+  }
 
-          <aside className="result-column" aria-label="선택한 모델의 예측 결과">
-            <div className="prediction-panel" aria-live="polite"><div className="prediction-heading"><span className="section-eyebrow">센서 한 건의 예측</span><span className="model-mode-label">{lightEnabled ? '조도 포함' : '조도 제외'}</span></div>
-              <div className={`room-visual ${lightEnabled ? 'room-visual--light' : ''}`} aria-hidden="true"><div className="room-window" /><div className="room-board" />{Array.from({ length: 6 }, (_, index) => <div className={`room-desk room-desk--${index + 1}`} key={index}><span /><span /></div>)}<span className="room-light room-light--one" /><span className="room-light room-light--two" /><div className="room-door" /></div>
-              <div className="prediction-title">{loading ? '분석 중…' : prediction?.label || '예측 대기'}</div><p className="prediction-subtitle">{prediction ? '선택한 모델이 예상한 현재 상태' : '센서값을 선택하고 예측을 실행하세요'}</p>
-              <div className="probability-block"><div><span>사용 중일 확률</span><strong>{prediction ? percent(prediction.probability, 1) : '—'}<small>%</small></strong></div><progress value={(prediction?.probability || 0) * 100} max="100" aria-label="사용 중일 확률" /><div className="probability-labels"><span>비어 있음</span><span>사용 중</span></div></div>
-              <div className="other-result"><span>다른 모델의 예측</span><b>{predictions ? `${predictions[lightEnabled ? 'without_light' : 'with_light'].label} · 사용 확률 ${percent(predictions[lightEnabled ? 'without_light' : 'with_light'].probability, 1)}%` : '—'}</b></div>
-            </div>
-            <div className="model-summary"><div className="section-heading"><h2>선택한 모델의 평가</h2><Icon name="chart" /></div><dl><div><dt>정밀도</dt><dd>{percent(report?.model_metrics.precision)}%</dd></div><div><dt>재현율</dt><dd>{percent(report?.model_metrics.recall)}%</dd></div><div><dt>F1 점수</dt><dd>{report ? report.model_metrics.f1.toFixed(4) : '—'}</dd></div></dl><p>평가 정확도는 여러 정답 데이터에서 맞힌 비율이고, 위의 확률은 현재 입력 한 건의 예측값입니다.</p></div>
-            <div className="experiment-note"><Icon name="info" /><div><b>조도 제외는 이렇게 작동해요</b><p>조도를 0으로 바꾸는 대신, 조도 입력 없이 학습한 모델을 사용합니다. 나머지 피처는 같은 값으로 두 모델에 입력합니다.</p></div></div>
-          </aside>
-        </section>
-        </>}
-        <footer className="workspace-footer"><span>시간순 학습·검증 분할 · 동일한 평가 파일 · 임계값 0.5</span><span>현재 재실 여부를 판별하며, 미래 사용 여부를 예측하지 않습니다.</span></footer>
-      </div>
-    </main>
-  </div>;
+  const primary = report?.models.with_light;
+  const selectedModel = report?.models[activeMode] || primary;
+  const availableComparison = Boolean(report?.models.without_light);
+  const totalVersions = registry.versions.length;
+  const best = registry.versions.reduce((previous, item) => !previous || item.models[0].metrics.accuracy > previous.models[0].metrics.accuracy ? item : previous, null);
+  const latest = registry.versions[0];
+  const experimentActions = <div className="model-selector"><label htmlFor="experiment-version">실험할 모델</label><select id="experiment-version" value={selected} disabled={!totalVersions} onChange={event => setSelected(event.target.value)}>{registry.versions.map(item => <option key={item.version} value={item.version}>{item.version} · {item.name}{item.current ? ' · 기본' : ''}</option>)}</select></div>;
+  const reportPanel = <ReportPanel report={report} version={selected} loading={reportLoading} onExperiment={() => setTab('experiment')} onReuse={reuse} onActivate={activate} isDefault={selected === registry.current_version} activating={activating} />;
+
+  return <div className="app-shell"><aside className="sidebar"><a className="brand" href="#" onClick={event => { event.preventDefault(); setTab('dashboard'); }}><span className="brand-icon"><Icon name="lab" size={25} /></span><span><b>공간 학습실</b><small>강의실 모델 워크스페이스</small></span></a>
+    <div className="nav-label">워크스페이스</div><nav aria-label="화면 탐색">{[['dashboard', '대시보드', 'dashboard'], ['experiment', '센서 실험', 'sliders'], ['training', '모델 학습', 'train']].map(([key, label, icon]) => <button key={key} aria-current={tab === key ? 'page' : undefined} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}><Icon name={icon} /><span>{label}</span>{key === 'training' && busy && <i className="live-dot" />}</button>)}</nav>
+    <div className="sidebar-bottom"><div className="engine-card"><span className="dot green" /><b>PyTorch · CPU</b><small>기본 모델 {registry.current_version || '연결 중'}</small></div><a href="/api/docs" target="_blank" rel="noreferrer"><Icon name="file" size={16} />Swagger UI <Icon name="arrow" size={14} /></a><p>학습 · 평가 · 버전 기록</p></div></aside>
+    <main><header className="topbar"><span>워크스페이스 <span className="breadcrumb">/</span> {tab === 'dashboard' ? '대시보드' : tab === 'training' ? '모델 학습' : '센서 실험'}</span><div><span className={`connection ${options ? 'online' : ''}`}><i />{options ? '모델 연결됨' : '연결 확인 중'}</span><button className="icon-button" aria-label="데이터 새로고침" onClick={() => refresh().then(() => setMessage('모델 기록을 새로고침했습니다.')).catch(cause => setError(cause.message))}><Icon name="refresh" size={17} /></button></div></header>
+      <div className="workspace"><div className="page-heading"><div><span className="eyebrow">강의실 사용 여부 · 모델 실험</span><h1>{tab === 'dashboard' ? '모델을 한눈에, 실험을 차곡차곡.' : tab === 'training' ? '다음 모델을 만들어 보세요.' : '센서로 읽는 강의실.'}</h1><p>{tab === 'dashboard' ? '피처와 학습 설정이 성능에 어떤 차이를 만드는지 비교하세요.' : tab === 'training' ? '피처를 선택하고 학습 설정을 조절하면, 새 모델과 보고서를 함께 기록합니다.' : '저장된 모델을 선택하고 측정값 한 건으로 현재 사용 여부를 확인하세요.'}</p></div>
+        {tab === 'dashboard' ? <button className="button primary" onClick={() => setTab('training')}><Icon name="play" size={16} />새 모델 학습</button> : <span className="badge neutral">{tab === 'training' ? 'PyTorch MLP' : `실험 ${selected || '—'}`}</span>}</div>
+        {error && <div className="alert error" role="alert"><span>{error}</span><button aria-label="오류 닫기" onClick={() => setError('')}>×</button></div>}
+        {message && <div className="alert info" role="status"><span>{message}</span><button aria-label="안내 닫기" onClick={() => setMessage('')}>×</button></div>}
+
+        {tab === 'dashboard' && <><div className="summary-grid"><div className="summary-card"><small>저장된 모델 버전</small><strong>{totalVersions}<span>개</span></strong><p>학습 설정과 평가를 함께 보존</p></div><div className="summary-card"><small>가장 높은 평가 정확도</small><strong>{best ? percent(best.models[0].metrics.accuracy) : '—'}</strong><p>{best?.version || '—'} · 선택 모델 기준</p></div><div className="summary-card"><small>기본 예측 모델</small><strong>{registry.current_version || '—'}</strong><p>다른 실험과 독립적으로 선택</p></div><div className="summary-card"><small>최근 학습</small><strong className="summary-word">{activeJob(job) ? STATUS[job.status] : latest?.version || '—'}</strong><p>{activeJob(job) ? job.phase : latest?.name || '모델 준비 중'}</p></div></div>
+          <section className="panel"><div className="section-heading"><div><span className="eyebrow">성능 비교</span><h2>버전마다 달라지는 정확도</h2></div><div className="chart-legend"><span><i className="dot green" />선택 모델</span><span><i className="dot blue" />조도 제외 비교</span></div></div>
+            <div className="performance-chart">{[...registry.versions].reverse().map(item => <button className={`performance-row ${selected === item.version ? 'selected' : ''}`} key={item.version} onClick={() => setSelected(item.version)} aria-label={`${item.version} 보고서 선택`}><span>{item.version}</span><div className="performance-track"><div className="performance-bar primary-bar" style={{ width: percent(item.models[0].metrics.accuracy) }} /><b>{percent(item.models[0].metrics.accuracy)}</b>{item.models[1] && <div className="performance-bar secondary-bar" style={{ width: percent(item.models[1].metrics.accuracy) }} />}</div><span className="feature-count">피처 {item.models[0].features.length}개</span></button>)}</div>
+            <p className="small-note">동일한 평가 파일의 정확도입니다. 검증 비율·임계값 등을 바꾼 실험은 설정도 함께 확인하세요.</p></section>
+          <section className="panel history-panel"><div className="section-heading"><div><span className="eyebrow">실험 이력</span><h2>모델 버전</h2></div><span className="badge neutral">{totalVersions}개 보존됨</span></div><div className="table-scroll"><table><thead><tr><th>버전 / 실험</th><th>사용한 피처</th><th>정확도</th><th>F1</th><th>학습 설정</th><th>기록 시각</th></tr></thead><tbody>{registry.versions.map(item => <tr key={item.version} className={selected === item.version ? 'selected' : ''}><td><button className="version-link" onClick={() => setSelected(item.version)}>{item.version}<Icon name="arrow" size={14} /></button>{item.current && <span className="badge success">기본</span>}<small>{item.name}</small>{item.same_model_as && <small>{item.same_model_as}와 같은 가중치</small>}</td><td><FeatureTags features={item.models[0].features} /></td><td className="metric-cell">{percent(item.models[0].metrics.accuracy)}</td><td>{decimal(item.models[0].metrics.f1)}</td><td>{item.config ? <><b>{item.config.optimizer.toUpperCase()} · {item.config.learning_rate}</b><small>{item.config.epochs}회 · {item.config.hidden_layers.join(' → ')}</small></> : <small>기존 저장 정보</small>}</td><td>{date(item.created_at_utc)}</td></tr>)}</tbody></table></div></section>
+          {reportPanel}</>}
+
+        {tab === 'training' && <div className="training-layout"><form className="training-form" onSubmit={train}><fieldset disabled={busy || !options}>
+          <section className="panel"><div className="section-heading"><div><span className="step-label">01 · 실험 설계</span><h2>이름과 데이터</h2></div><span className="badge neutral">시간순 분할</span></div><label className="field-label" htmlFor="run-name">실험 이름</label><input id="run-name" className="wide-input" value={config.name} maxLength={80} required onChange={event => update('name', event.target.value)} placeholder="예: 시간과 요일을 제외한 실험" />
+            <div className="dataset-card"><Icon name="file" /><div><b>학습 {options?.training_data.rows.toLocaleString() || '—'}건 · 평가 {options?.test_data.rows.toLocaleString() || '—'}건</b><small>training_dataset.csv / test_dataset.csv</small><small>표준화는 학습 구간에서만 계산 · 평가 정답은 학습에 사용하지 않음</small></div></div></section>
+          <section className="panel"><div className="section-heading"><div><span className="step-label">02 · 피처 선택</span><h2>무엇을 학습할까요?</h2></div><span className="badge success">{config.features.length} / 6개 사용</span></div><p className="section-description">스위치는 실제 학습 입력을 바꿉니다. 아래 슬라이더 값은 완료한 모델의 예측 미리보기에 사용하며 CSV 학습값을 바꾸지 않습니다.</p>
+            <div className="training-feature-grid">{FEATURES.map(feature => { const on = config.features.includes(feature.key); const profile = options?.features.find(item => item.key === feature.key); return <div className={`training-feature ${on ? 'enabled' : ''}`} key={feature.key}><Switch label={`${feature.label} 피처 사용`} checked={on} onChange={() => toggleFeature(feature.key)} description={feature.description} />
+              <RangeControl label={`${feature.label} 미리보기`} value={values[feature.key]} {...INPUT_LIMITS[feature.key]} min={feature.min} max={feature.max} step={feature.step} numberStep={['Hour', 'DayOfWeek'].includes(feature.key) ? 1 : 'any'} suffix={feature.unit} hint={feature.hint} disabled={!on} format={feature.key === 'DayOfWeek' ? value => DAYS[value] : undefined} onChange={value => setValues(previous => ({ ...previous, [feature.key]: value }))} />
+              <small className="data-range">학습 관측값 {profile ? `${Number(profile.minimum.toFixed(2))}~${Number(profile.maximum.toFixed(2))}${feature.unit}` : '불러오는 중'}</small></div>; })}</div>
+            {!config.features.length && <p className="inline-error">피처를 한 개 이상 선택하세요.</p>}
+            <Switch label="조도 제외 모델도 비교 학습" checked={config.compare_light} disabled={!config.features.includes('Light') || config.features.length < 2} onChange={value => update('compare_light', value)} description="조도와 다른 피처를 선택한 경우, 같은 설정으로 조도만 제외한 모델을 함께 보존합니다." /></section>
+          <section className="panel"><div className="section-heading"><div><span className="step-label">03 · 학습 설정</span><h2>모델의 학습 방식을 조절하세요.</h2></div><button type="button" className="text-button" onClick={() => { setConfig(previous => ({ ...options.defaults, name: previous.name, features: previous.features })); }}>설정 초기화</button></div>
+            <div className="control-grid"><RangeControl label="최대 에포크" value={config.epochs} min={1} max={500} hint="데이터를 반복해서 학습하는 횟수" suffix="회" onChange={value => update('epochs', value)} />
+              <RangeControl label="학습률" value={config.learning_rate} min={0.00001} max={0.1} step={0.00001} hint="가중치 변경 폭 · 기본 0.01" onChange={value => update('learning_rate', value)} />
+              <label className="select-control">옵티마이저<select aria-label="옵티마이저" value={config.optimizer} onChange={event => update('optimizer', event.target.value)}><option value="adam">Adam · 적응형 학습률</option><option value="sgd">SGD · 경사 하강법</option></select></label>
+              <label className="select-control">배치 크기<select aria-label="배치 크기" value={config.batch_size} onChange={event => update('batch_size', Number(event.target.value))}>{[0, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].map(value => <option key={value} value={value}>{value === 0 ? '전체 배치' : `${value}행 / 배치`}</option>)}</select></label>
+              <RangeControl label="검증 비율" value={config.validation_ratio} min={0.1} max={0.4} step={0.01} hint="시간순 뒤쪽 데이터를 검증에 사용" format={percent} onChange={value => update('validation_ratio', value)} />
+              <RangeControl label="조기 종료 대기" value={config.patience} min={0} max={100} hint="검증 손실이 개선되지 않는 횟수 · 0은 끄기" suffix="회" onChange={value => update('patience', value)} /></div>
+            <div className="architecture-controls"><div className="section-heading"><h3>신경망 구조</h3><span className="architecture-badge">{config.hidden_layers.join(' → ')} → 1</span></div><div className="control-grid"><label className="select-control">은닉층 수<select aria-label="은닉층 수" value={config.hidden_layers.length} onChange={event => update('hidden_layers', Array.from({ length: Number(event.target.value) }, (_, index) => config.hidden_layers[index] || 8))}>{[1, 2, 3].map(value => <option key={value} value={value}>{value}개</option>)}</select></label><label className="select-control">활성화 함수<select aria-label="활성화 함수" value={config.activation} onChange={event => update('activation', event.target.value)}><option value="relu">ReLU</option><option value="tanh">Tanh</option></select></label>
+                {config.hidden_layers.map((width, index) => <RangeControl key={index} label={`은닉층 ${index + 1} 너비`} value={width} min={4} max={128} hint="층의 뉴런 개수" onChange={value => update('hidden_layers', config.hidden_layers.map((item, position) => position === index ? value : item))} />)}
+                <RangeControl label="드롭아웃" value={config.dropout} min={0} max={0.5} step={0.01} hint="학습 중 일부 뉴런을 무작위 제외" format={percent} onChange={value => update('dropout', value)} />
+                <RangeControl label="가중치 감쇠" value={config.weight_decay} min={0} max={0.1} step={0.0001} hint="가중치가 과도하게 커지는 것을 줄임" onChange={value => update('weight_decay', value)} /></div></div>
+            <div className="control-grid advanced-controls"><RangeControl label="분류 임계값" value={config.threshold} min={0.1} max={0.9} step={0.01} hint="이 확률 이상이면 사용 중으로 판별" onChange={value => update('threshold', value)} /><label className="select-control">랜덤 시드<input aria-label="랜덤 시드" type="number" min={0} max={2147483647} step={1} value={config.seed} onChange={event => update('seed', event.target.value === '' ? '' : Number(event.target.value))} /><small>동일 설정을 재현하기 위한 시작값</small></label></div>
+            <Switch label="입력 표준화" checked={config.normalize} onChange={value => update('normalize', value)} description="서로 다른 센서 단위의 크기를 맞춥니다." />
+            <Switch label="사용 중 클래스 균형 보정" checked={config.balance_classes} onChange={value => update('balance_classes', value)} description="사용 중 데이터가 적을 때 학습 손실의 가중치를 조정합니다." />
+            <Switch label="완료 모델을 기본 예측에 사용" checked={config.make_default} onChange={value => update('make_default', value)} description="끄면 기존 기본 모델을 유지하고 새 모델을 실험 이력에만 추가합니다." /></section>
+        </fieldset><div className="training-submit"><div><b>{busy ? '학습을 진행하고 있습니다.' : '준비된 설정으로 새 버전을 학습합니다.'}</b><small>완료된 모델만 등록 · 실패와 중지 이력은 별도 보존</small></div><button type="submit" className="button primary" disabled={busy || !options || !config.features.length}><Icon name="play" size={17} />{busy ? '학습 중…' : '학습 시작'}</button></div></form>
+          <aside className="training-aside"><section className="panel live-panel"><div className="section-heading"><div><span className="eyebrow">실시간 학습</span><h2>{job ? STATUS[job.status] : '학습을 기다리고 있어요.'}</h2></div>{job && <span className={`badge ${job.status === 'completed' ? 'success' : 'neutral'}`}>{job.version || '새 실험'}</span>}</div>
+            <p className="job-name">{job?.config.name || '설정을 조정한 뒤 학습을 시작하세요.'}</p>{job && <><div className="progress-heading"><span>{job.cancel_requested && activeJob(job) ? '중지 요청 처리 중' : job.phase}</span><b>{job.progress || 0}%</b></div><progress max="100" value={job.progress || 0} aria-label="학습 진행률" /><p className="small-note">{job.epoch ? `${job.epoch} / ${job.config.epochs} 에포크 · ` : ''}{date(job.created_at_utc)}</p>
+              {activeJob(job) && <button className="button secondary full-width" disabled={cancelling || job.cancel_requested} onClick={cancel}>{cancelling || job.cancel_requested ? '중지 요청됨' : '학습 중지'}</button>}
+              {job.error && <p className="inline-error">{job.error}</p>}
+              <LossChart curves={job.curves} compact />
+              {job.status === 'completed' && <button className="button secondary full-width" onClick={() => { setSelected(job.version); setTab('dashboard'); }}>완료 모델 보고서 보기 <Icon name="arrow" size={15} /></button>}</>}
+            <p className="small-note">탭을 바꾸거나 새로고침해도 서버에서 학습은 계속됩니다. 동시에 한 실험을 실행합니다.</p></section>
+            <section className="panel preview-panel"><div className="section-heading"><div><span className="eyebrow">입력 미리보기</span><h3>{selected || '—'} 예측</h3></div></div><p className="small-note">피처 카드의 슬라이더 값으로 저장된 모델을 테스트합니다. 아직 학습하지 않은 설정의 예측은 아닙니다.</p><FeatureTags features={primary?.features} /><button className="button secondary full-width" disabled={predicting || reportLoading || !report} onClick={predict}>{predicting ? '예측 중…' : '미리보기 값으로 예측'}</button>{predictions && previewVersion === selected && <div className="preview-result"><b>{predictions.with_light.label}</b><strong>{percent(predictions.with_light.probability)}</strong><small>사용 중일 확률 · {previewVersion}</small></div>}</section>
+            <section className="panel"><div className="section-heading"><h3>최근 학습 요청</h3><span className="badge neutral">{jobs.length}</span></div><div className="job-history">{jobs.length ? jobs.slice(0, 8).map(item => <button key={item.id} onClick={() => inspectJob(item)}><span><b>{item.version || STATUS[item.status]}</b><small>{item.config.name}</small></span><span className={`status-label ${item.status}`}>{STATUS[item.status]}</span></button>) : <p className="empty">아직 실행한 학습이 없습니다.</p>}</div></section>
+          </aside></div>}
+
+        {tab === 'experiment' && <>{experimentActions}<div className="experiment-layout"><form className="panel" onSubmit={predict}><PredictionForm values={values} setValues={setValues} enabled={selectedModel?.features} disabled={!report || reportLoading} />
+            <button type="submit" className="button primary full-width" disabled={predicting || !report || reportLoading}>{predicting ? '예측 중…' : '이 값으로 예측하기'}<Icon name="arrow" size={17} /></button><p className="small-note">예시는 가상 측정값입니다. 입력 한 건의 확률과 여러 정답에서 계산한 평가 정확도는 다릅니다.</p></form>
+            <section className="panel prediction-panel"><div className="section-heading"><h2>예측 결과</h2><span className="badge neutral">{selected}</span></div><div className="mode-buttons">{Object.keys(report?.models || {}).map(mode => <button key={mode} aria-pressed={activeMode === mode} className={activeMode === mode ? 'active' : ''} onClick={() => setActiveMode(mode)}>{modelLabel(mode)}</button>)}</div><FeatureTags features={selectedModel?.features} />
+              {predictions && previewVersion === selected ? <div className={`occupancy-result ${predictions[activeMode]?.occupancy ? 'occupied' : ''}`}><span className="result-icon"><Icon name="lab" size={36} /></span><h3>{predictions[activeMode]?.label}</h3><small>사용 중일 확률</small><strong>{percent(predictions[activeMode]?.probability)}</strong><progress max="1" value={predictions[activeMode]?.probability || 0} aria-label="사용 중일 확률" /><small>모델 {previewVersion} · 임계값 {selectedModel?.threshold}</small></div> : <div className="empty-chart"><Icon name="sliders" size={32} /><p>측정값을 입력하고 예측 버튼을 누르세요.</p></div>}
+              <h3>선택 모델의 평가</h3><MetricGrid metrics={selectedModel?.model_metrics} />{availableComparison && <p className="small-note">조도 제외 비교는 Light를 0으로 바꾸는 방식이 아니라 해당 입력 없이 따로 학습한 모델입니다.</p>}</section></div>{reportPanel}</>}
+        <footer>실제 저장된 가중치로 예측 · 평가 파일 {options?.test_data.rows.toLocaleString() || '—'}건 · 현재 재실 여부 판별</footer>
+      </div></main></div>;
 }
 
-// 파일 하나로 화면을 유지하되 Vite 갱신 시 React 루트 하나를 재사용한다.
+// Vite 갱신에서도 같은 React 루트를 사용한다.
 const reactRoot = import.meta.hot?.data.reactRoot || createRoot(document.getElementById('root'));
 reactRoot.render(<App />);
-if (import.meta.hot) {
-  import.meta.hot.dispose((data) => { data.reactRoot = reactRoot; });
-}
+if (import.meta.hot) import.meta.hot.dispose(data => { data.reactRoot = reactRoot; });

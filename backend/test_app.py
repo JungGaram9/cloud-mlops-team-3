@@ -1,10 +1,13 @@
 """PyTorch 모델의 품질·재현성과 Swagger·HTTP 계약을 함께 검증한다."""
 
 import csv
+import copy
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from datetime import datetime, timezone
+from unittest.mock import Mock, patch
 
 import torch
 from fastapi.testclient import TestClient
@@ -13,9 +16,10 @@ from backend.app import create_app
 from models.model import (FEATURES, FEATURE_SETS, MIN_ACCURACY, MOCK_SENSORS, REPORTS_DIR,
                           ROOT, SENSOR_FEATURES, WEIGHTS_DIR, SensorInput, current_version,
                           input_vector, load_model, pair_fingerprint, predict_one, weight_path)
-from models.train import load_dataset, require_accuracy, save_model_pair, split_training
+from models.train import (TrainingConfig, load_dataset, require_accuracy, run_training_job,
+                          save_model_pair, split_training, train_experiment, write_json)
 
-VERSION = current_version()
+VERSION = "v3" if weight_path("v3").is_file() else current_version()
 MODEL_PATH = weight_path(VERSION)
 NO_LIGHT_PATH = weight_path(VERSION, "without_light")
 REPORT_PATH = REPORTS_DIR / VERSION / "metrics.json"
@@ -41,21 +45,21 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(modes["without_light"]["features"], list(FEATURE_SETS["without_light"]))
 
     def test_saved_pytorch_model_returns_same_prediction(self):
-        first = predict_one(load_model(), MOCK_SENSORS)
-        self.assertEqual(first, predict_one(load_model(), MOCK_SENSORS))
+        first = predict_one(load_model(MODEL_PATH), MOCK_SENSORS)
+        self.assertEqual(first, predict_one(load_model(MODEL_PATH), MOCK_SENSORS))
         self.assertEqual(first["model_version"], VERSION)
         self.assertGreaterEqual(first["probability"], 0)
         self.assertLessEqual(first["probability"], 1)
         self.assertEqual(first["occupancy"], int(first["probability"] >= 0.5))
-        self.assertEqual(load_model().metadata["framework"], "pytorch")
-        self.assertFalse(load_model().network.training)
+        self.assertEqual(load_model(MODEL_PATH).metadata["framework"], "pytorch")
+        self.assertFalse(load_model(MODEL_PATH).network.training)
 
     def test_scaler_uses_training_partition_only(self):
         source = load_dataset(ROOT / "data/training_dataset.csv")
         training, validation = split_training(source)
         self.assertLess(max(training.dates), min(validation.dates))
         self.assertEqual(len(training.y) + len(validation.y), len(source.y))
-        self.assertTrue(torch.allclose(load_model().mean, torch.from_numpy(training.x).mean(dim=0)))
+        self.assertTrue(torch.allclose(load_model(MODEL_PATH).mean, torch.from_numpy(training.x).mean(dim=0)))
 
     def test_evaluation_meets_85_percent(self):
         report = read_json(REPORT_PATH)
@@ -103,8 +107,8 @@ class ModelTests(unittest.TestCase):
                               Hour=date.hour, DayOfWeek=date.weekday())
         expected = torch.tensor(input_vector(sensors), dtype=torch.float32)
         self.assertTrue(torch.equal(torch.from_numpy(source.x[0]), expected))
-        self.assertIn("Hour", load_model().metadata["features"])
-        self.assertIn("DayOfWeek", load_model().metadata["features"])
+        self.assertIn("Hour", load_model(MODEL_PATH).metadata["features"])
+        self.assertIn("DayOfWeek", load_model(MODEL_PATH).metadata["features"])
 
     def test_time_and_weekday_change_current_model_prediction(self):
         # 범위를 벗어난 분포에서는 ReLU 출력이 같을 수 있으므로 실제 측정값으로 확인한다.
@@ -123,6 +127,9 @@ class ModelTests(unittest.TestCase):
         for checkpoint in pair.values():
             checkpoint["version"] = "v100"
             checkpoint["created_at_utc"] = "다른 시각"
+        self.assertEqual(pair_fingerprint(pair), signature)
+        for checkpoint in pair.values():
+            checkpoint["network_config"] = {"hidden_layers": [16, 8], "activation": "relu", "dropout": 0.0}
         self.assertEqual(pair_fingerprint(pair), signature)
         pair["with_light"]["mean"][0] += 0.01
         self.assertNotEqual(pair_fingerprint(pair), signature)
@@ -145,6 +152,16 @@ class ModelTests(unittest.TestCase):
 
 
 class ApiTests(unittest.TestCase):
+    def setUp(self):
+        # 실제 실행 중인 학습 이력과 기본 모델을 테스트가 변경하지 않는다.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.jobs_dir = Path(directory.name)
+        for target, value in (("backend.app.JOBS_DIR", self.jobs_dir), ("backend.app.current_version", lambda: VERSION)):
+            fixture = patch(target, value)
+            fixture.start()
+            self.addCleanup(fixture.stop)
+
     def test_versions_group_two_models_under_current_version(self):
         with TestClient(create_app()) as client:
             response = client.get("/versions")
@@ -159,7 +176,7 @@ class ApiTests(unittest.TestCase):
         with TestClient(create_app()) as client:
             response = client.post("/compare", json=MOCK_SENSORS)
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json()["with_light"], predict_one(load_model(), MOCK_SENSORS))
+            self.assertEqual(response.json()["with_light"], predict_one(load_model(MODEL_PATH), MOCK_SENSORS))
             self.assertEqual(response.json()["without_light"], predict_one(load_model(NO_LIGHT_PATH), MOCK_SENSORS))
 
     def test_comparison_endpoint_matches_report(self):
@@ -173,7 +190,7 @@ class ApiTests(unittest.TestCase):
             })
             response = client.post("/predict", json=MOCK_SENSORS)
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json(), predict_one(load_model(), MOCK_SENSORS))
+            self.assertEqual(response.json(), predict_one(load_model(MODEL_PATH), MOCK_SENSORS))
 
     def test_swagger_and_assets_are_served_locally(self):
         with TestClient(create_app()) as client:
@@ -249,6 +266,168 @@ class ApiTests(unittest.TestCase):
         with TestClient(create_app()) as client:
             self.assertEqual(client.post("/compare?version=v999999", json=MOCK_SENSORS).status_code, 404)
             self.assertEqual(client.get("/comparison?version=invalid").status_code, 400)
+
+    def test_training_catalog_returns_raw_feature_ranges_and_settings(self):
+        with TestClient(create_app()) as client:
+            result = client.get("/training/options").json()
+            self.assertEqual(result["defaults"], TrainingConfig().model_dump())
+            self.assertEqual([item["key"] for item in result["features"]], list(FEATURES))
+            self.assertEqual(result["features"][-1]["minimum"], 0)
+            self.assertEqual(result["features"][-1]["maximum"], 6)
+            self.assertEqual(result["training_data"]["rows"], 8143)
+            self.assertEqual(result["split_strategy"], "chronological")
+
+    def test_invalid_training_settings_never_start_a_process(self):
+        cases = [{"features": []}, {"features": ["Unknown"]}, {"features": ["Light", "Light"]},
+                 {"epochs": True}, {"epochs": 501}, {"learning_rate": 0}, {"batch_size": 1},
+                 {"hidden_layers": [2]}, {"hidden_layers": [True]}, {"hidden_layers": [8, 8, 8, 8]},
+                 {"normalize": "true"}, {"activation": "unknown"}, {"optimizer": "unknown"},
+                 {"seed": -1}, {"patience": -1}, {"threshold": 1}, {"validation_ratio": 0.5},
+                 {"dropout": 0.8}, {"weight_decay": 0.2}, {"name": "  "}, {"unknown": 1}]
+        with patch("backend.app.subprocess.Popen") as process, TestClient(create_app()) as client:
+            for fields in cases:
+                with self.subTest(fields=fields):
+                    self.assertEqual(client.post("/training/jobs", json=fields).status_code, 400)
+            process.assert_not_called()
+            self.assertEqual(list(self.jobs_dir.glob("*.json")), [])
+
+    def test_training_submission_conflict_and_cancel_are_persistent(self):
+        process = Mock()
+        process.poll.return_value = None
+        process.pid = 12345
+        with patch("backend.app.subprocess.Popen", return_value=process) as spawn, TestClient(create_app()) as client:
+            response = client.post("/training/jobs", json={"features": ["CO2", "Hour"], "name": "선택 피처 실험"})
+            self.assertEqual(response.status_code, 202)
+            job_id = response.json()["id"]
+            spawn.assert_called_once()
+            self.assertEqual(read_json(self.jobs_dir / f"{job_id}.json")["config"]["features"], ["CO2", "Hour"])
+            self.assertEqual(client.post("/training/jobs", json={}).status_code, 409)
+            self.assertEqual(client.post(f"/training/jobs/{job_id}/cancel").status_code, 200)
+            self.assertTrue(client.get(f"/training/jobs/{job_id}").json()["cancel_requested"])
+            self.assertEqual(client.get("/training/jobs/missing").status_code, 404)
+
+    def test_interrupted_worker_is_failed_and_allows_the_next_request(self):
+        job_id = "a" * 32
+        write_json(self.jobs_dir / f"{job_id}.json", {"id": job_id, "status": "running", "pid": 999999999,
+                   "created_at_utc": datetime.now(timezone.utc).isoformat(), "config": TrainingConfig().model_dump()})
+        process = Mock()
+        process.poll.return_value = None
+        process.pid = 12345
+        with patch("backend.app.subprocess.Popen", return_value=process), TestClient(create_app()) as client:
+            self.assertEqual(client.get(f"/training/jobs/{job_id}").json()["status"], "failed")
+            self.assertEqual(client.post("/training/jobs", json={}).status_code, 202)
+
+    def test_legacy_training_report_does_not_invent_missing_settings(self):
+        with TestClient(create_app()) as client:
+            report = client.get(f"/versions/{VERSION}/training").json()
+            self.assertTrue(report["legacy"])
+            self.assertIsNone(report["config"])
+            self.assertEqual(report["models"], read_json(COMPARISON_PATH)["modes"])
+            self.assertEqual(client.get("/versions/invalid/training").status_code, 400)
+
+    def test_activation_changes_default_predictions_without_touching_original_weights(self):
+        weights = self.jobs_dir / "weights"
+        weights.mkdir()
+        write_json(weights / "current.json", {"version": VERSION})
+        def selected():
+            return read_json(weights / "current.json")["version"]
+        with patch("backend.app.WEIGHTS_DIR", weights), patch("backend.app.current_version", selected), TestClient(create_app()) as client:
+            self.assertEqual(client.post("/versions/v2/activate").status_code, 200)
+            self.assertEqual(client.get("/health").json()["model_version"], "v2")
+            self.assertEqual(client.post("/predict", json=MOCK_SENSORS).json(), predict_one(load_model(weight_path("v2")), MOCK_SENSORS))
+            self.assertEqual(client.post("/versions/v99999/activate").status_code, 404)
+            self.assertEqual(client.post("/versions/invalid/activate").status_code, 400)
+            self.assertEqual(selected(), "v2")
+
+
+class TrainingTests(unittest.TestCase):
+    def test_report_write_failure_keeps_model_registration_unpublished(self):
+        with tempfile.TemporaryDirectory() as directory:
+            weights, reports = Path(directory) / "weights", Path(directory) / "reports"
+            pair = {mode: torch.load(weight_path(VERSION, mode), weights_only=True, map_location="cpu") for mode in FEATURE_SETS}
+            evaluations = read_json(COMPARISON_PATH)["modes"]
+            with patch("models.train.write_json", side_effect=OSError("보고서 저장 실패")), self.assertRaises(OSError):
+                save_model_pair(pair, evaluations, weights, reports, force_new=True)
+            self.assertEqual(list(weights.glob("v*")), [])
+            self.assertEqual(list(reports.glob("v*")), [])
+            self.assertFalse((weights / "current.json").exists())
+
+    def test_arbitrary_features_network_and_preprocessing_match_inference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            weights, reports = Path(directory) / "weights", Path(directory) / "reports"
+            config = TrainingConfig(name="센서 일부만 학습", features=["CO2", "Hour"], epochs=3,
+                                    hidden_layers=[12], activation="tanh", optimizer="sgd", dropout=0.1,
+                                    normalize=False, balance_classes=True, threshold=0.6, validation_ratio=0.3)
+            version = train_experiment(config, weights_dir=weights, reports_dir=reports)
+            model = load_model(weights / version / "model.pt")
+            self.assertEqual(model.metadata["features"], ["CO2", "Hour"])
+            self.assertEqual(model.metadata["threshold"], 0.6)
+            self.assertEqual(model.metadata["network_config"]["activation"], "tanh")
+            self.assertTrue(torch.equal(model.mean, torch.zeros(3)))
+            self.assertTrue(torch.equal(model.scale, torch.ones(3)))
+            self.assertEqual(predict_one(model, MOCK_SENSORS), predict_one(model, {**MOCK_SENSORS, "Light": 0,
+                             "Humidity": 99, "Temperature": -10, "DayOfWeek": 6}))
+            self.assertFalse((weights / version / "model_without_light.pt").exists())
+            self.assertFalse((weights / "current.json").exists())
+            report = read_json(reports / version / "training.json")
+            self.assertEqual(report["config"], config.model_dump())
+            self.assertEqual(len(report["models"]["with_light"]["training"]["history"]), 3)
+            self.assertTrue((reports / version / "training.md").is_file())
+
+    def test_every_explicit_training_run_preserves_a_new_version_even_if_identical(self):
+        with tempfile.TemporaryDirectory() as directory:
+            weights, reports = Path(directory) / "weights", Path(directory) / "reports"
+            pair = {mode: torch.load(weight_path(VERSION, mode), weights_only=True, map_location="cpu") for mode in FEATURE_SETS}
+            evaluations = read_json(COMPARISON_PATH)["modes"]
+            first = save_model_pair(copy.deepcopy(pair), copy.deepcopy(evaluations), weights, reports, force_new=True, make_default=False)
+            original = (weights / first / "model.pt").read_bytes()
+            second = save_model_pair(copy.deepcopy(pair), copy.deepcopy(evaluations), weights, reports, force_new=True, make_default=False)
+            self.assertNotEqual(first, second)
+            self.assertEqual((weights / first / "model.pt").read_bytes(), original)
+            self.assertEqual(read_json(reports / first / "light_comparison.json")["pair_fingerprint"],
+                             read_json(reports / second / "light_comparison.json")["pair_fingerprint"])
+
+    def test_worker_completes_and_records_minibatch_training_even_below_quality_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            jobs, weights, reports = root / "jobs", root / "weights", root / "reports"
+            job_id = "b" * 32
+            config = TrainingConfig(features=["Light", "Hour"], epochs=2, hidden_layers=[4, 4, 4], dropout=0.2,
+                                    batch_size=1024, compare_light=True, patience=0)
+            write_json(jobs / f"{job_id}.json", {"id": job_id, "status": "queued", "config": config.model_dump()})
+            run_training_job(job_id, jobs, weights, reports)
+            record = read_json(jobs / f"{job_id}.json")
+            self.assertEqual(record["status"], "completed")
+            self.assertEqual(record["progress"], 100)
+            self.assertEqual(set(record["curves"]), set(FEATURE_SETS))
+            report = read_json(reports / record["version"] / "training.json")
+            self.assertEqual(report["models"]["without_light"]["features"], ["Hour"])
+            self.assertEqual(report["models"]["with_light"]["training"]["effective_batch_size"], 1024)
+            self.assertFalse(report["models"]["with_light"]["quality_gate"]["passed"])
+            self.assertEqual(load_model(weights / record["version"] / "model.pt").metadata["network_config"]["dropout"], 0.2)
+
+    def test_cancelled_job_does_not_register_any_model(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            jobs, weights, reports = root / "jobs", root / "weights", root / "reports"
+            job_id = "c" * 32
+            write_json(jobs / f"{job_id}.json", {"id": job_id, "status": "queued", "config": TrainingConfig().model_dump()})
+            (jobs / f"{job_id}.cancel").touch()
+            run_training_job(job_id, jobs, weights, reports)
+            self.assertEqual(read_json(jobs / f"{job_id}.json")["status"], "cancelled")
+            self.assertEqual(list(weights.glob("v*")), [])
+
+    def test_failed_job_records_error_without_registering_model(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            jobs, weights, reports = root / "jobs", root / "weights", root / "reports"
+            job_id = "d" * 32
+            write_json(jobs / f"{job_id}.json", {"id": job_id, "status": "queued", "config": TrainingConfig().model_dump()})
+            with patch("models.train.train_experiment", side_effect=ValueError("학습 검증 오류")):
+                run_training_job(job_id, jobs, weights, reports)
+            self.assertEqual(read_json(jobs / f"{job_id}.json")["status"], "failed")
+            self.assertEqual(read_json(jobs / f"{job_id}.json")["error"], "학습 검증 오류")
+            self.assertEqual(list(weights.glob("v*")), [])
 
 
 if __name__ == "__main__":

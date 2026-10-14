@@ -13,7 +13,7 @@ from torch import nn
 
 ROOT = Path(__file__).resolve().parents[1]
 WEIGHTS_DIR = ROOT / "models/weights"
-REPORTS_DIR = ROOT / "models/reports"
+REPORTS_DIR = ROOT / "reports"
 CURRENT_PATH = WEIGHTS_DIR / "current.json"
 SENSOR_FEATURES = ("Temperature", "Humidity", "Light", "CO2")
 FEATURES = (*SENSOR_FEATURES, "Hour", "DayOfWeek")
@@ -60,10 +60,17 @@ def input_vector(sensors: SensorInput, features: tuple | list = FEATURES,
 
 
 class OccupancyNetwork(nn.Module):
-    def __init__(self, input_size: int = len(encoded_features(FEATURES))) -> None:
+    def __init__(self, input_size: int = len(encoded_features(FEATURES)),
+                 hidden_layers: list | tuple = (16, 8), activation: str = "relu", dropout: float = 0) -> None:
         super().__init__()
-        self.layers = nn.Sequential(nn.Linear(input_size, 16), nn.ReLU(),
-                                    nn.Linear(16, 8), nn.ReLU(), nn.Linear(8, 1))
+        layers = []
+        for width in hidden_layers:
+            layers.extend((nn.Linear(input_size, width), nn.ReLU() if activation == "relu" else nn.Tanh()))
+            if dropout:
+                layers.append(nn.Dropout(dropout))
+            input_size = width
+        layers.append(nn.Linear(input_size, 1))
+        self.layers = nn.Sequential(*layers)
 
     def forward(self, values: torch.Tensor) -> torch.Tensor:
         return self.layers(values).squeeze(-1)
@@ -103,7 +110,7 @@ def load_model(path: Path | None = None) -> LoadedModel:
     encoding = checkpoint.get("encoding", "sensor-only-v1")
     if (not isinstance(checkpoint.get("version"), str) or checkpoint.get("framework") != "pytorch"
             or checkpoint.get("format_version") != 1 or encoding not in (ENCODING, "sensor-only-v1")
-            or features not in (*FEATURE_SETS.values(), SENSOR_FEATURES, ("Temperature", "Humidity", "CO2"))):
+            or not features or len(features) != len(set(features)) or not set(features) <= set(FEATURES)):
         raise ValueError("체크포인트의 버전·프레임워크·입력 규격이 지원하는 모델과 다릅니다.")
     valid_version(checkpoint["version"])
     size = len(encoded_features(features, encoding))
@@ -114,7 +121,12 @@ def load_model(path: Path | None = None) -> LoadedModel:
     threshold = checkpoint["threshold"]
     if not isinstance(threshold, (int, float)) or not 0 < threshold < 1:
         raise ValueError("체크포인트의 분류 임계값이 잘못되었습니다.")
-    network = OccupancyNetwork(size)
+    network_config = checkpoint.get("network_config", {"hidden_layers": [16, 8], "activation": "relu", "dropout": 0})
+    if (not 1 <= len(network_config["hidden_layers"]) <= 3
+            or any(type(width) is not int or not 4 <= width <= 128 for width in network_config["hidden_layers"])
+            or network_config["activation"] not in ("relu", "tanh") or not 0 <= network_config["dropout"] <= 0.5):
+        raise ValueError("체크포인트의 신경망 설정이 잘못되었습니다.")
+    network = OccupancyNetwork(size, **network_config)
     network.load_state_dict(checkpoint["state_dict"], strict=True)
     if any(not torch.isfinite(parameter).all() for parameter in network.parameters()):
         raise ValueError("체크포인트의 가중치가 유한한 값이 아닙니다.")
@@ -139,8 +151,10 @@ def pair_fingerprint(checkpoints: dict) -> str:
     digest = hashlib.sha256()
     for mode in sorted(checkpoints):
         checkpoint = checkpoints[mode]
+        network_config = checkpoint.get("network_config", {"hidden_layers": [16, 8], "activation": "relu", "dropout": 0})
         contract = {"mode": mode, "features": checkpoint["features"],
-                    "encoding": checkpoint.get("encoding", "sensor-only-v1"), "threshold": checkpoint["threshold"]}
+                    "encoding": checkpoint.get("encoding", "sensor-only-v1"), "threshold": float(checkpoint["threshold"]),
+                    "network_config": {**network_config, "dropout": float(network_config["dropout"])}}
         digest.update(json.dumps(contract, sort_keys=True).encode())
         tensors = {**checkpoint["state_dict"], "mean": checkpoint["mean"], "scale": checkpoint["scale"]}
         for name, tensor in sorted(tensors.items()):
@@ -158,22 +172,30 @@ def model_versions(active_version: str | None = None) -> dict:
         report = json.loads(path.read_text(encoding="utf-8"))
         version = valid_version(report["model_version"])
         models = []
-        for mode in FEATURE_SETS:
-            variant = report["modes"][mode]
+        for mode, variant in report["modes"].items():
             models.append({"mode": mode, "features": variant["features"],
                            "architecture": variant["architecture"], "metrics": variant["model_metrics"],
                            "quality_gate": variant["quality_gate"],
+                           "training": {key: value for key, value in variant.get("training", {}).items() if key != "history"},
+                           "validation_metrics": variant.get("validation_metrics"),
+                           "future_subset_metrics": variant.get("future_subset_metrics"),
                            "checkpoint_exists": weight_path(version, mode).is_file()})
         ready = all(item["checkpoint_exists"] for item in models)
         signature = report.get("pair_fingerprint")
-        if not signature and ready:
+        if ready:
             signature = pair_fingerprint({mode: torch.load(weight_path(version, mode), map_location="cpu", weights_only=True)
-                                          for mode in FEATURE_SETS})
+                                          for mode in report["modes"]})
+        training_path = REPORTS_DIR / version / "training.json"
+        training_report = json.loads(training_path.read_text(encoding="utf-8")) if training_path.is_file() else None
         pairs.append({"version": version, "current": version == active_version,
                       "created_at_utc": report["modes"]["with_light"]["created_at_utc"],
                       "test_rows": report["test_rows"], "models": models,
                       "ready": ready, "fingerprint": signature,
-                      "accuracy_difference_percentage_points": report["accuracy_difference_percentage_points"]})
+                      "name": training_report["config"]["name"] if training_report else f"기존 {version} 모델",
+                      "config": training_report["config"] if training_report else None,
+                      "duration_seconds": training_report.get("duration_seconds") if training_report else None,
+                      "job_id": training_report.get("job_id") if training_report else None,
+                      "accuracy_difference_percentage_points": report.get("accuracy_difference_percentage_points")})
     identities = {}
     for pair in reversed(pairs):
         signature = pair["fingerprint"]

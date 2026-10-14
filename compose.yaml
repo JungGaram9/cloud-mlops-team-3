@@ -19,7 +19,9 @@ services:
     command: ["python", "-m", "models.train"]
     volumes:
       - ./backend:/app/backend:ro
-      - ./models:/app/models
+      - ./models:/app/models:ro
+      - ./models/weights:/app/models/weights
+      - ./reports:/app/reports
       - ./data:/app/data:ro
     tmpfs:
       - /tmp
@@ -31,10 +33,13 @@ services:
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     init: true
+    user: "0:0"
     command: ["python", "-m", "uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     volumes:
       - ./backend:/app/backend:ro
       - ./models:/app/models:ro
+      - ./models/weights:/app/models/weights
+      - ./reports:/app/reports
       - ./data:/app/data:ro
     read_only: true
     tmpfs:
