@@ -110,6 +110,26 @@ function downloadReport(report) {
 
 function ReportPanel({ report, version, loading, onExperiment, onReuse, onActivate, isDefault, activating }) {
   const modes = Object.entries(report?.models || {});
+  const primaryModel = report?.models.with_light;
+  const config = report?.config || primaryModel?.training;
+  const parameters = report ? [
+    ['옵티마이저', config.optimizer?.toUpperCase()],
+    ['학습률', config.learning_rate],
+    ['최대 에포크', config.epochs ?? config.max_epochs],
+    ['실행 / 최적 에포크', `${primaryModel.training.epochs_run} / ${primaryModel.training.best_epoch}`],
+    ['배치 크기', config.batch_size === 0 ? '전체 배치' : config.batch_size],
+    ['은닉층', config.hidden_layers?.join(' → ')],
+    ['활성화', config.activation],
+    ['드롭아웃', config.dropout],
+    ['가중치 감쇠', config.weight_decay],
+    ['검증 비율', config.validation_ratio == null ? null : percent(config.validation_ratio)],
+    ['조기 종료 대기', config.patience === 0 ? '끄기' : config.patience],
+    ['시드', config.seed ?? primaryModel.random_state],
+    ['표준화', config.normalize == null ? null : config.normalize ? '사용' : '제외'],
+    ['클래스 균형', config.balance_classes == null ? null : config.balance_classes ? '보정' : '원본'],
+    ['학습 / 검증 / 평가 행', `${primaryModel.training_split.rows.toLocaleString()} / ${primaryModel.validation_split.rows.toLocaleString()} / ${primaryModel.test_data.rows.toLocaleString()}`],
+    ['검증 최저 손실', decimal(primaryModel.training.best_validation_loss)],
+  ] : [];
   return <section className="panel report-panel"><div className="section-heading"><div><span className="eyebrow">모델 기록</span><h2>{version || '모델 선택'} 학습 보고서</h2></div><Icon name="file" /></div>
     {loading ? <p className="empty">보고서를 불러오는 중입니다.</p> : !report ? <p className="empty">버전을 선택하면 학습 설정과 실제 평가 결과를 볼 수 있습니다.</p> : <>
       {report.legacy && <p className="notice">{report.note}</p>}
@@ -124,16 +144,9 @@ function ReportPanel({ report, version, loading, onExperiment, onReuse, onActiva
       </div>)}
       <LossChart models={report.models} emptyMessage={report.legacy ? '기존 버전에는 손실 곡선이 저장되어 있지 않습니다.' : undefined} />
       <div className="section-heading"><h3>하이퍼파라미터</h3><span className="small-note">선택 모델 기준</span></div>
-      <dl className="parameter-grid">{(() => { const model = report.models.with_light; const config = report.config || model.training; return [
-        ['옵티마이저', config.optimizer?.toUpperCase()], ['학습률', config.learning_rate], ['최대 에포크', config.epochs ?? config.max_epochs],
-        ['실행 / 최적 에포크', `${model.training.epochs_run} / ${model.training.best_epoch}`], ['배치 크기', config.batch_size === 0 ? '전체 배치' : config.batch_size],
-        ['은닉층', config.hidden_layers?.join(' → ')], ['활성화', config.activation], ['드롭아웃', config.dropout], ['가중치 감쇠', config.weight_decay],
-        ['검증 비율', config.validation_ratio == null ? null : percent(config.validation_ratio)], ['조기 종료 대기', config.patience === 0 ? '끄기' : config.patience],
-        ['시드', config.seed ?? model.random_state], ['표준화', config.normalize == null ? null : config.normalize ? '사용' : '제외'],
-        ['클래스 균형', config.balance_classes == null ? null : config.balance_classes ? '보정' : '원본'],
-        ['학습 / 검증 / 평가 행', `${model.training_split.rows.toLocaleString()} / ${model.validation_split.rows.toLocaleString()} / ${model.test_data.rows.toLocaleString()}`],
-        ['검증 최저 손실', decimal(model.training.best_validation_loss)],
-      ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value ?? '기록 없음'}</dd></div>); })()}</dl>
+      <dl className="parameter-grid">{parameters.map(([label, value]) => (
+        <div key={label}><dt>{label}</dt><dd>{value ?? '기록 없음'}</dd></div>
+      ))}</dl>
       <p className="small-note">학습은 시간순으로 분할합니다. 별도 평가 파일에는 학습 기간 이전·이후 기록이 함께 있습니다. 같은 평가 파일로 반복 실험한 결과는 독립적인 최종 성능 검증이 아닙니다.</p>
     </>}
   </section>;
@@ -149,6 +162,73 @@ function PredictionForm({ values, setValues, enabled, presets = true, disabled =
         disabled={disabled || excluded} format={feature.key === 'DayOfWeek' ? value => DAYS[value] : undefined}
         onChange={value => setValues(previous => ({ ...previous, [feature.key]: value }))} /></div>;
     })}</div></>;
+}
+
+function Dashboard({ registry, selected, onSelect, job }) {
+  const totalVersions = registry.versions.length;
+  const latest = registry.versions[0];
+  const best = registry.versions.reduce((previous, item) => (
+    !previous || item.models[0].metrics.accuracy > previous.models[0].metrics.accuracy ? item : previous
+  ), null);
+
+  return <>
+    <div className="summary-grid">
+      <div className="summary-card"><small>저장된 모델 버전</small><strong>{totalVersions}<span>개</span></strong><p>학습 설정과 평가를 함께 보존</p></div>
+      <div className="summary-card"><small>가장 높은 평가 정확도</small><strong>{best ? percent(best.models[0].metrics.accuracy) : '—'}</strong><p>{best?.version || '—'} · 선택 모델 기준</p></div>
+      <div className="summary-card"><small>기본 예측 모델</small><strong>{registry.current_version || '—'}</strong><p>다른 실험과 독립적으로 선택</p></div>
+      <div className="summary-card"><small>최근 학습</small><strong className="summary-word">{activeJob(job) ? STATUS[job.status] : latest?.version || '—'}</strong><p>{activeJob(job) ? job.phase : latest?.name || '모델 준비 중'}</p></div>
+    </div>
+    <section className="panel">
+      <div className="section-heading">
+        <div><span className="eyebrow">성능 비교</span><h2>버전마다 달라지는 정확도</h2></div>
+        <div className="chart-legend"><span><i className="dot green" />선택 모델</span><span><i className="dot blue" />조도 제외 비교</span></div>
+      </div>
+      <div className="performance-chart">
+        {[...registry.versions].reverse().map(item => (
+          <button className={`performance-row ${selected === item.version ? 'selected' : ''}`} key={item.version}
+            onClick={() => onSelect(item.version)} aria-label={`${item.version} 보고서 선택`}>
+            <span>{item.version}</span>
+            <div className="performance-track">
+              <div className="performance-bar primary-bar" style={{ width: percent(item.models[0].metrics.accuracy) }} />
+              <b>{percent(item.models[0].metrics.accuracy)}</b>
+              {item.models[1] && <div className="performance-bar secondary-bar" style={{ width: percent(item.models[1].metrics.accuracy) }} />}
+            </div>
+            <span className="feature-count">피처 {item.models[0].features.length}개</span>
+          </button>
+        ))}
+      </div>
+      <p className="small-note">동일한 평가 파일의 정확도입니다. 검증 비율·임계값 등을 바꾼 실험은 설정도 함께 확인하세요.</p>
+    </section>
+    <section className="panel history-panel">
+      <div className="section-heading">
+        <div><span className="eyebrow">실험 이력</span><h2>모델 버전</h2></div>
+        <span className="badge neutral">{totalVersions}개 보존됨</span>
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead><tr><th>버전 / 실험</th><th>사용한 피처</th><th>정확도</th><th>F1</th><th>학습 설정</th><th>기록 시각</th></tr></thead>
+          <tbody>{registry.versions.map(item => (
+            <tr key={item.version} className={selected === item.version ? 'selected' : ''}>
+              <td>
+                <button className="version-link" onClick={() => onSelect(item.version)}>{item.version}<Icon name="arrow" size={14} /></button>
+                {item.current && <span className="badge success">기본</span>}
+                <small>{item.name}</small>
+                {item.same_model_as && <small>{item.same_model_as}와 같은 가중치</small>}
+              </td>
+              <td><FeatureTags features={item.models[0].features} /></td>
+              <td className="metric-cell">{percent(item.models[0].metrics.accuracy)}</td>
+              <td>{decimal(item.models[0].metrics.f1)}</td>
+              <td>{item.config ? <>
+                <b>{item.config.optimizer.toUpperCase()} · {item.config.learning_rate}</b>
+                <small>{item.config.epochs}회 · {item.config.hidden_layers.join(' → ')}</small>
+              </> : <small>기존 저장 정보</small>}</td>
+              <td>{date(item.created_at_utc)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </section>
+  </>;
 }
 
 function App() {
@@ -177,9 +257,12 @@ function App() {
 
   async function refresh() {
     const [versions, history] = await Promise.all([request('/versions'), request('/training/jobs')]);
-    setRegistry(versions); setJobs(history.jobs);
+    setRegistry(versions);
+    setJobs(history.jobs);
     const running = history.jobs.find(activeJob);
-    if (running) setJob(previous => ({ ...running, curves: previous?.id === running.id ? previous.curves : {} }));
+    if (running) {
+      setJob(previous => ({ ...running, curves: previous?.id === running.id ? previous.curves : {} }));
+    }
     return { versions, history: history.jobs };
   }
 
@@ -187,8 +270,13 @@ function App() {
     const controller = new AbortController();
     Promise.all([request('/versions', { signal: controller.signal }), request('/training/jobs', { signal: controller.signal }), request('/training/options', { signal: controller.signal })])
       .then(async ([versions, history, catalog]) => {
-        setRegistry(versions); setSelected(versions.current_version); setJobs(history.jobs); setOptions(catalog); setConfig(catalog.defaults);
-        const recent = history.jobs.find(activeJob) || history.jobs[0]; setJob(recent || null);
+        setRegistry(versions);
+        setSelected(versions.current_version);
+        setJobs(history.jobs);
+        setOptions(catalog);
+        setConfig(catalog.defaults);
+        const recent = history.jobs.find(activeJob) || history.jobs[0];
+        setJob(recent || null);
         if (activeJob(recent)) setConfig(recent.config);
         else if (recent) {
           handledJob.current.add(recent.id);
@@ -202,7 +290,11 @@ function App() {
   useEffect(() => {
     if (!selected) return;
     const controller = new AbortController();
-    predictionController.current?.abort(); setPredictions(null); setReport(null); setReportLoading(true); setActiveMode('with_light');
+    predictionController.current?.abort();
+    setPredictions(null);
+    setReport(null);
+    setReportLoading(true);
+    setActiveMode('with_light');
     request(`/versions/${selected}/training`, { signal: controller.signal }).then(setReport)
       .catch(cause => { if (cause.name !== 'AbortError') setError(cause.message); })
       .finally(() => { if (!controller.signal.aborted) setReportLoading(false); });
@@ -229,61 +321,104 @@ function App() {
           handledJob.current.add(next.id);
           const data = await refresh();
           if (next.status === 'completed') {
-            setSelected(next.version); setMessage(`${next.version} 학습을 완료했습니다. 보고서와 예측 실험에서 확인하세요.`);
-          } else if (next.status === 'failed') setError(next.error || '학습에 실패했습니다. 설정을 확인하고 다시 실행하세요.');
-          else setMessage('학습을 중지했습니다. 새 모델 버전은 만들지 않았습니다.');
+            setSelected(next.version);
+            setMessage(`${next.version} 학습을 완료했습니다. 보고서와 예측 실험에서 확인하세요.`);
+          } else if (next.status === 'failed') {
+            setError(next.error || '학습에 실패했습니다. 설정을 확인하고 다시 실행하세요.');
+          } else {
+            setMessage('학습을 중지했습니다. 새 모델 버전은 만들지 않았습니다.');
+          }
           setRegistry(data.versions);
         }
       } catch (cause) { if (cause.name !== 'AbortError') setError(`학습 상태를 불러오지 못했습니다. ${cause.message}`); }
       finally { pending = false; }
     };
-    const timer = setInterval(poll, 1200); poll();
+    const timer = setInterval(poll, 1200);
+    poll();
     return () => { controller.abort(); clearInterval(timer); };
   }, [job?.id, job?.status]);
 
-  function update(key, value) { setConfig(previous => ({ ...previous, [key]: value })); }
-  function toggleFeature(key) { setConfig(previous => ({ ...previous, features: FEATURES.map(item => item.key).filter(name => name === key ? !previous.features.includes(name) : previous.features.includes(name)) })); }
+  function update(key, value) {
+    setConfig(previous => ({ ...previous, [key]: value }));
+  }
+
+  function toggleFeature(key) {
+    setConfig(previous => {
+      const features = FEATURES.map(item => item.key).filter(name => (
+        name === key ? !previous.features.includes(name) : previous.features.includes(name)
+      ));
+      return { ...previous, features };
+    });
+  }
 
   async function train(event) {
-    event.preventDefault(); if (busy || !config.features.length) return;
-    setStarting(true); setError(''); setMessage('');
+    event.preventDefault();
+    if (busy || !config.features.length) return;
+    setStarting(true);
+    setError('');
+    setMessage('');
     try {
-      const next = await request('/training/jobs', { body: config }); setJob(next); setJobs(previous => [next, ...previous]);
+      const next = await request('/training/jobs', { body: config });
+      setJob(next);
+      setJobs(previous => [next, ...previous]);
     } catch (cause) {
       setError(cause.message);
-      try { const data = await refresh(); const running = data.history.find(activeJob); if (running) setJob(running); } catch { /* 최초 오류 메시지를 유지한다. */ }
+      try {
+        const data = await refresh();
+        const running = data.history.find(activeJob);
+        if (running) setJob(running);
+      } catch {
+        // 중복 요청 등의 최초 오류 메시지를 유지한다.
+      }
     } finally { setStarting(false); }
   }
 
   async function cancel() {
     if (!activeJob(job)) return;
-    setCancelling(true); setError('');
-    try { await request(`/training/jobs/${job.id}/cancel`, { method: 'POST' }); setJob(previous => ({ ...previous, cancel_requested: true })); }
+    setCancelling(true);
+    setError('');
+    try {
+      await request(`/training/jobs/${job.id}/cancel`, { method: 'POST' });
+      setJob(previous => ({ ...previous, cancel_requested: true }));
+    }
     catch (cause) { setError(cause.message); }
     finally { setCancelling(false); }
   }
 
   async function predict(event) {
-    event?.preventDefault(); if (!selected || reportLoading || !report) return;
-    predictionController.current?.abort(); const controller = new AbortController(); predictionController.current = controller;
-    setPredicting(true); setError('');
+    event?.preventDefault();
+    if (!selected || reportLoading || !report) return;
+    predictionController.current?.abort();
+    const controller = new AbortController();
+    predictionController.current = controller;
+    setPredicting(true);
+    setError('');
     try {
       const result = await request(`/compare?version=${selected}`, { body: values, signal: controller.signal });
-      if (!controller.signal.aborted) { setPredictions(result); setPreviewVersion(selected); }
+      if (!controller.signal.aborted) {
+        setPredictions(result);
+        setPreviewVersion(selected);
+      }
     } catch (cause) { if (cause.name !== 'AbortError') setError(cause.message); }
     finally { if (predictionController.current === controller) setPredicting(false); }
   }
 
   async function activate() {
-    setActivating(true); setError('');
-    try { await request(`/versions/${selected}/activate`, { method: 'POST' }); await refresh(); setMessage(`${selected}를 기본 예측 모델로 적용했습니다.`); }
+    setActivating(true);
+    setError('');
+    try {
+      await request(`/versions/${selected}/activate`, { method: 'POST' });
+      await refresh();
+      setMessage(`${selected}를 기본 예측 모델로 적용했습니다.`);
+    }
     catch (cause) { setError(cause.message); }
     finally { setActivating(false); }
   }
 
   function reuse() {
     const next = report?.config || { ...options.defaults, features: report.models.with_light.features };
-    setConfig({ ...next, name: `${selected} 기반 실험`, make_default: false }); setTab('training');
+    setConfig({ ...next, name: `${selected} 기반 실험`, make_default: false });
+    setTab('training');
     setMessage(report.config ? `${selected}의 학습 설정을 불러왔습니다.` : `${selected}의 피처를 불러왔습니다. 저장되지 않은 설정은 기본값으로 시작합니다.`);
   }
 
@@ -294,15 +429,16 @@ function App() {
         setJob(previous => activeJob(previous) && previous.id !== item.id ? previous : detail);
       } catch (cause) { setError(cause.message); }
     }
-    if (item.version) { setSelected(item.version); setTab('dashboard'); }
+    if (item.version) {
+      setSelected(item.version);
+      setTab('dashboard');
+    }
   }
 
   const primary = report?.models.with_light;
   const selectedModel = report?.models[activeMode] || primary;
   const availableComparison = Boolean(report?.models.without_light);
   const totalVersions = registry.versions.length;
-  const best = registry.versions.reduce((previous, item) => !previous || item.models[0].metrics.accuracy > previous.models[0].metrics.accuracy ? item : previous, null);
-  const latest = registry.versions[0];
   const experimentActions = <div className="model-selector"><label htmlFor="experiment-version">실험할 모델</label><select id="experiment-version" value={selected} disabled={!totalVersions} onChange={event => setSelected(event.target.value)}>{registry.versions.map(item => <option key={item.version} value={item.version}>{item.version} · {item.name}{item.current ? ' · 기본' : ''}</option>)}</select></div>;
   const reportPanel = <ReportPanel report={report} version={selected} loading={reportLoading} onExperiment={() => setTab('experiment')} onReuse={reuse} onActivate={activate} isDefault={selected === registry.current_version} activating={activating} />;
 
@@ -315,11 +451,8 @@ function App() {
         {error && <div className="alert error" role="alert"><span>{error}</span><button aria-label="오류 닫기" onClick={() => setError('')}>×</button></div>}
         {message && <div className="alert info" role="status"><span>{message}</span><button aria-label="안내 닫기" onClick={() => setMessage('')}>×</button></div>}
 
-        {tab === 'dashboard' && <><div className="summary-grid"><div className="summary-card"><small>저장된 모델 버전</small><strong>{totalVersions}<span>개</span></strong><p>학습 설정과 평가를 함께 보존</p></div><div className="summary-card"><small>가장 높은 평가 정확도</small><strong>{best ? percent(best.models[0].metrics.accuracy) : '—'}</strong><p>{best?.version || '—'} · 선택 모델 기준</p></div><div className="summary-card"><small>기본 예측 모델</small><strong>{registry.current_version || '—'}</strong><p>다른 실험과 독립적으로 선택</p></div><div className="summary-card"><small>최근 학습</small><strong className="summary-word">{activeJob(job) ? STATUS[job.status] : latest?.version || '—'}</strong><p>{activeJob(job) ? job.phase : latest?.name || '모델 준비 중'}</p></div></div>
-          <section className="panel"><div className="section-heading"><div><span className="eyebrow">성능 비교</span><h2>버전마다 달라지는 정확도</h2></div><div className="chart-legend"><span><i className="dot green" />선택 모델</span><span><i className="dot blue" />조도 제외 비교</span></div></div>
-            <div className="performance-chart">{[...registry.versions].reverse().map(item => <button className={`performance-row ${selected === item.version ? 'selected' : ''}`} key={item.version} onClick={() => setSelected(item.version)} aria-label={`${item.version} 보고서 선택`}><span>{item.version}</span><div className="performance-track"><div className="performance-bar primary-bar" style={{ width: percent(item.models[0].metrics.accuracy) }} /><b>{percent(item.models[0].metrics.accuracy)}</b>{item.models[1] && <div className="performance-bar secondary-bar" style={{ width: percent(item.models[1].metrics.accuracy) }} />}</div><span className="feature-count">피처 {item.models[0].features.length}개</span></button>)}</div>
-            <p className="small-note">동일한 평가 파일의 정확도입니다. 검증 비율·임계값 등을 바꾼 실험은 설정도 함께 확인하세요.</p></section>
-          <section className="panel history-panel"><div className="section-heading"><div><span className="eyebrow">실험 이력</span><h2>모델 버전</h2></div><span className="badge neutral">{totalVersions}개 보존됨</span></div><div className="table-scroll"><table><thead><tr><th>버전 / 실험</th><th>사용한 피처</th><th>정확도</th><th>F1</th><th>학습 설정</th><th>기록 시각</th></tr></thead><tbody>{registry.versions.map(item => <tr key={item.version} className={selected === item.version ? 'selected' : ''}><td><button className="version-link" onClick={() => setSelected(item.version)}>{item.version}<Icon name="arrow" size={14} /></button>{item.current && <span className="badge success">기본</span>}<small>{item.name}</small>{item.same_model_as && <small>{item.same_model_as}와 같은 가중치</small>}</td><td><FeatureTags features={item.models[0].features} /></td><td className="metric-cell">{percent(item.models[0].metrics.accuracy)}</td><td>{decimal(item.models[0].metrics.f1)}</td><td>{item.config ? <><b>{item.config.optimizer.toUpperCase()} · {item.config.learning_rate}</b><small>{item.config.epochs}회 · {item.config.hidden_layers.join(' → ')}</small></> : <small>기존 저장 정보</small>}</td><td>{date(item.created_at_utc)}</td></tr>)}</tbody></table></div></section>
+        {tab === 'dashboard' && <>
+          <Dashboard registry={registry} selected={selected} onSelect={setSelected} job={job} />
           {reportPanel}</>}
 
         {tab === 'training' && <div className="training-layout"><form className="training-form" onSubmit={train}><fieldset disabled={busy || !options}>

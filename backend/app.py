@@ -53,17 +53,21 @@ def read_job(job_id: str, processes: dict | None = None) -> dict:
     record = json.loads(path.read_text(encoding="utf-8"))
     if record["status"] in ("queued", "running"):
         process = (processes or {}).get(job_id)
-        interrupted = process is not None and process.poll() is not None
-        if process is None and record.get("pid"):
+        interrupted = False
+        if process is not None:
+            interrupted = process.poll() is not None
+        elif record.get("pid"):
+            # API 재시작 후에는 PID가 같은 학습 작업을 가리키는지 확인한다.
             command = Path(f"/proc/{record['pid']}/cmdline")
             try:
                 interrupted = not command.is_file() or job_id.encode() not in command.read_bytes().split(b"\x00")
             except FileNotFoundError:
                 interrupted = True
-        if process is None and record["status"] == "queued" and not record.get("pid"):
+        elif record["status"] == "queued":
             age = (datetime.now(timezone.utc) - datetime.fromisoformat(record["created_at_utc"])).total_seconds()
             interrupted = age > 30
         if interrupted:
+            # 프로세스 종료 직전에 완료 상태를 저장했을 수 있으므로 다시 읽는다.
             record = json.loads(path.read_text(encoding="utf-8"))
             if record["status"] in ("queued", "running"):
                 record.update(status="failed", phase="학습 중단", error="학습 프로세스가 중단되었습니다. 새 학습을 시작할 수 있습니다.",
@@ -81,21 +85,24 @@ def list_jobs(processes=None):
 def create_app(model_path: Path | None = None) -> FastAPI:
     def get_pair(application, version=None):
         version = version or current_version()
-        if version not in application.state.pairs:
-            path = REPORTS_DIR / version / "light_comparison.json"
-            if not path.is_file():
-                raise HTTPException(404, detail="해당 버전의 평가 보고서가 없습니다.")
-            report = json.loads(path.read_text(encoding="utf-8"))
-            if not all(weight_path(version, mode).is_file() for mode in report["modes"]):
-                raise HTTPException(404, detail="해당 버전의 가중치가 없습니다.")
-            pair = {mode: load_model(weight_path(version, mode)) for mode in report["modes"]}
-            if any(model.metadata["version"] != version for model in pair.values()):
-                raise ValueError("모델의 가중치 버전이 일치하지 않습니다.")
-            application.state.pairs[version] = {**pair, "report": report}
-            if len(application.state.pairs) > 8:
-                oldest = next(iter(application.state.pairs))
-                if oldest != version:
-                    del application.state.pairs[oldest]
+        if version in application.state.pairs:
+            return application.state.pairs[version]
+
+        path = REPORTS_DIR / version / "light_comparison.json"
+        if not path.is_file():
+            raise HTTPException(404, detail="해당 버전의 평가 보고서가 없습니다.")
+        report = json.loads(path.read_text(encoding="utf-8"))
+        if not all(weight_path(version, mode).is_file() for mode in report["modes"]):
+            raise HTTPException(404, detail="해당 버전의 가중치가 없습니다.")
+        pair = {mode: load_model(weight_path(version, mode)) for mode in report["modes"]}
+        if any(model.metadata["version"] != version for model in pair.values()):
+            raise ValueError("모델의 가중치 버전이 일치하지 않습니다.")
+
+        application.state.pairs[version] = {**pair, "report": report}
+        if len(application.state.pairs) > 8:
+            oldest = next(iter(application.state.pairs))
+            if oldest != version:
+                del application.state.pairs[oldest]
         return application.state.pairs[version]
 
     @asynccontextmanager
@@ -225,33 +232,48 @@ def create_app(model_path: Path | None = None) -> FastAPI:
     @application.get("/training/jobs", summary="학습 작업 상태와 이력", tags=["학습"])
     def jobs():
         records = list_jobs(application.state.processes)
-        application.state.processes = {key: value for key, value in application.state.processes.items() if value.poll() is None}
-        return {"jobs": [{key: value for key, value in record.items() if key != "curves"} for record in records]}
+        application.state.processes = {
+            job_id: process for job_id, process in application.state.processes.items()
+            if process.poll() is None
+        }
+        summaries = [{key: value for key, value in record.items() if key != "curves"} for record in records]
+        return {"jobs": summaries}
 
     @application.post("/training/jobs", status_code=202, responses=errors, summary="새 모델 학습 시작", tags=["학습"])
     def start_training(config: TrainingConfig):
         try:
             with FileLock(JOBS_DIR / ".submission.lock", timeout=0):
-                active = next((item for item in list_jobs(application.state.processes) if item["status"] in ("queued", "running")), None)
+                records = list_jobs(application.state.processes)
+                active = next((item for item in records if item["status"] in ("queued", "running")), None)
                 if active:
                     raise HTTPException(409, f"진행 중인 학습이 있습니다: {active['id']}")
                 job_id = uuid.uuid4().hex
-                record = {"id": job_id, "status": "queued", "phase": "학습 준비", "progress": 0,
-                          "created_at_utc": datetime.now(timezone.utc).isoformat(), "config": config.model_dump(),
-                          "version": None, "error": None, "curves": {}}
-                write_json(job_path(job_id), record)
+                path = job_path(job_id)
+                record = {
+                    "id": job_id,
+                    "status": "queued",
+                    "phase": "학습 준비",
+                    "progress": 0,
+                    "created_at_utc": datetime.now(timezone.utc).isoformat(),
+                    "config": config.model_dump(),
+                    "version": None,
+                    "error": None,
+                    "curves": {},
+                }
+                write_json(path, record)
                 try:
+                    worker_command = [sys.executable, "-m", "models.train", "--job-id", job_id]
                     with (JOBS_DIR / f"{job_id}.log").open("wb") as output:
-                        process = subprocess.Popen([sys.executable, "-m", "models.train", "--job-id", job_id],
+                        process = subprocess.Popen(worker_command,
                                                    cwd=ROOT, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
                     application.state.processes[job_id] = process
                     # 무거운 PyTorch import 중에도 재시작한 API가 실제 작업을 찾을 수 있게 PID를 남긴다.
-                    latest = json.loads(job_path(job_id).read_text(encoding="utf-8"))
+                    latest = json.loads(path.read_text(encoding="utf-8"))
                     latest["pid"] = process.pid
-                    write_json(job_path(job_id), latest)
+                    write_json(path, latest)
                 except OSError as error:
                     record.update(status="failed", error="학습 프로세스를 시작할 수 없습니다.")
-                    write_json(job_path(job_id), record)
+                    write_json(path, record)
                     raise HTTPException(503, record["error"]) from error
                 return record
         except Timeout as error:
