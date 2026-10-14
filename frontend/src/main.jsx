@@ -23,7 +23,7 @@ const PRESETS = [
 const DEFAULT_CONFIG = { name: '새 학습 실험', features: FEATURES.map(item => item.key), epochs: 200, learning_rate: 0.01,
   batch_size: 0, hidden_layers: [16, 8], activation: 'relu', optimizer: 'adam', dropout: 0, weight_decay: 0,
   validation_ratio: 0.2, patience: 30, threshold: 0.5, seed: 42, normalize: true, balance_classes: false,
-  compare_light: true, make_default: false };
+  compare_light: true, make_default: false, datasets: ['uci', 'graz_room_a'] };
 const STATUS = { queued: '준비 중', running: '학습 중', completed: '완료', failed: '실패', cancelled: '중지됨' };
 const percent = value => Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : '—';
 const decimal = value => Number.isFinite(value) ? value.toFixed(4) : '—';
@@ -121,6 +121,9 @@ function ReportPanel({ report, version, loading, onExperiment, onReuse, onActiva
         <FeatureTags features={model.features} /><MetricGrid metrics={model.model_metrics} /><p className="architecture">{model.architecture} · 임계값 {model.threshold}</p>
         <div className="confusion"><b>혼동 행렬</b><span>실제 비어 있음 → 예측 비어 있음 / 사용 중: {model.model_metrics.confusion_matrix[0].join(' / ')}</span><span>실제 사용 중 → 예측 비어 있음 / 사용 중: {model.model_metrics.confusion_matrix[1].join(' / ')}</span></div>
         {model.future_subset_metrics && <p className="small-note">학습 기간 이후 구간 정확도 {percent(model.future_subset_metrics.accuracy)} · 전체 평가 정확도와 별도로 확인하세요.</p>}
+        {model.test_sets && <div className="test-sets"><div className="section-heading"><h3>장소·기간별 평가</h3><span className="small-note">업무시간 = 평일 07~19시</span></div>
+          <div className="table-scroll"><table><thead><tr><th>평가 데이터</th><th>전체 정확도</th><th>업무시간 정확도</th><th>기준선</th><th>업무시간 F1</th></tr></thead><tbody>{Object.entries(model.test_sets).map(([key, result]) => <tr key={key}><td>{result.label}<small>{result.rows.toLocaleString()}건 · 업무시간 {result.working_hours.rows.toLocaleString()}건</small></td><td>{percent(result.metrics?.accuracy)}</td><td className="metric-cell">{percent(result.working_hours.metrics?.accuracy)}</td><td>{percent(result.working_hours.majority_baseline_accuracy)}</td><td>{decimal(result.working_hours.metrics?.f1)}</td></tr>)}</tbody></table></div>
+          <p className="small-note">위 정확도·정밀도·재현율은 이전 버전과 비교하기 위한 UCI 평가 파일 기준입니다. 기준선은 업무시간에 다수 클래스로만 예측한 정확도이며, 이보다 높아야 의미가 있습니다.</p></div>}
       </div>)}
       <LossChart models={report.models} emptyMessage={report.legacy ? '기존 버전에는 손실 곡선이 저장되어 있지 않습니다.' : undefined} />
       <div className="section-heading"><h3>하이퍼파라미터</h3><span className="small-note">선택 모델 기준</span></div>
@@ -131,6 +134,7 @@ function ReportPanel({ report, version, loading, onExperiment, onReuse, onActiva
         ['검증 비율', config.validation_ratio == null ? null : percent(config.validation_ratio)], ['조기 종료 대기', config.patience === 0 ? '끄기' : config.patience],
         ['시드', config.seed ?? model.random_state], ['표준화', config.normalize == null ? null : config.normalize ? '사용' : '제외'],
         ['클래스 균형', config.balance_classes == null ? null : config.balance_classes ? '보정' : '원본'],
+        ['학습 데이터', model.training_datasets ? Object.values(model.training_datasets).join(' + ') : null],
         ['학습 / 검증 / 평가 행', `${model.training_split.rows.toLocaleString()} / ${model.validation_split.rows.toLocaleString()} / ${model.test_data.rows.toLocaleString()}`],
         ['검증 최저 손실', decimal(model.training.best_validation_loss)],
       ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value ?? '기록 없음'}</dd></div>); })()}</dl>
@@ -189,7 +193,7 @@ function App() {
       .then(async ([versions, history, catalog]) => {
         setRegistry(versions); setSelected(versions.current_version); setJobs(history.jobs); setOptions(catalog); setConfig(catalog.defaults);
         const recent = history.jobs.find(activeJob) || history.jobs[0]; setJob(recent || null);
-        if (activeJob(recent)) setConfig(recent.config);
+        if (activeJob(recent)) setConfig({ ...catalog.defaults, ...recent.config });
         else if (recent) {
           handledJob.current.add(recent.id);
           const detail = await request(`/training/jobs/${recent.id}`, { signal: controller.signal });
@@ -243,6 +247,7 @@ function App() {
 
   function update(key, value) { setConfig(previous => ({ ...previous, [key]: value })); }
   function toggleFeature(key) { setConfig(previous => ({ ...previous, features: FEATURES.map(item => item.key).filter(name => name === key ? !previous.features.includes(name) : previous.features.includes(name)) })); }
+  function toggleDataset(key) { setConfig(previous => ({ ...previous, datasets: options.training_sources.map(item => item.key).filter(name => name === key ? !previous.datasets.includes(name) : previous.datasets.includes(name)) })); }
 
   async function train(event) {
     event.preventDefault(); if (busy || !config.features.length) return;
@@ -282,9 +287,9 @@ function App() {
   }
 
   function reuse() {
-    const next = report?.config || { ...options.defaults, features: report.models.with_light.features };
+    const next = { ...options.defaults, ...(report?.config || { features: report.models.with_light.features }) };
     setConfig({ ...next, name: `${selected} 기반 실험`, make_default: false }); setTab('training');
-    setMessage(report.config ? `${selected}의 학습 설정을 불러왔습니다.` : `${selected}의 피처를 불러왔습니다. 저장되지 않은 설정은 기본값으로 시작합니다.`);
+    setMessage(report.config?.datasets ? `${selected}의 학습 설정을 불러왔습니다.` : report.config ? `${selected}의 학습 설정을 불러왔습니다. 학습 데이터 기록이 없어 기본 학습 데이터를 사용합니다.` : `${selected}의 피처를 불러왔습니다. 저장되지 않은 설정은 기본값으로 시작합니다.`);
   }
 
   async function inspectJob(item) {
@@ -324,7 +329,8 @@ function App() {
 
         {tab === 'training' && <div className="training-layout"><form className="training-form" onSubmit={train}><fieldset disabled={busy || !options}>
           <section className="panel"><div className="section-heading"><div><span className="step-label">01 · 실험 설계</span><h2>이름과 데이터</h2></div><span className="badge neutral">시간순 분할</span></div><label className="field-label" htmlFor="run-name">실험 이름</label><input id="run-name" className="wide-input" value={config.name} maxLength={80} required onChange={event => update('name', event.target.value)} placeholder="예: 시간과 요일을 제외한 실험" />
-            <div className="dataset-card"><Icon name="file" /><div><b>학습 {options?.training_data.rows.toLocaleString() || '—'}건 · 평가 {options?.test_data.rows.toLocaleString() || '—'}건</b><small>training_dataset.csv / test_dataset.csv</small><small>표준화는 학습 구간에서만 계산 · 평가 정답은 학습에 사용하지 않음</small></div></div></section>
+            <div className="dataset-card"><Icon name="file" /><div><b>학습 {options ? options.training_sources.filter(item => config.datasets.includes(item.key)).reduce((sum, item) => sum + item.rows, 0).toLocaleString() : '—'}건 · 평가 {options?.test_data.rows.toLocaleString() || '—'}건</b><small>평가: {options?.test_sets.map(item => `${item.label} ${item.rows.toLocaleString()}건`).join(' · ') || '불러오는 중'}</small><small>데이터마다 시간순 뒤쪽을 검증에 사용 · 표준화는 학습 구간에서만 계산 · 평가 정답은 학습에 사용하지 않음</small></div></div>
+            {options?.training_sources.map(source => { const on = config.datasets.includes(source.key); return <Switch key={source.key} label={`${source.label} 학습`} checked={on} disabled={on && config.datasets.length === 1} onChange={() => toggleDataset(source.key)} description={`${source.file} · ${source.rows.toLocaleString()}건`} />; })}</section>
           <section className="panel"><div className="section-heading"><div><span className="step-label">02 · 피처 선택</span><h2>무엇을 학습할까요?</h2></div><span className="badge success">{config.features.length} / 6개 사용</span></div><p className="section-description">스위치는 실제 학습 입력을 바꿉니다. 아래 슬라이더 값은 완료한 모델의 예측 미리보기에 사용하며 CSV 학습값을 바꾸지 않습니다.</p>
             <div className="training-feature-grid">{FEATURES.map(feature => { const on = config.features.includes(feature.key); const profile = options?.features.find(item => item.key === feature.key); return <div className={`training-feature ${on ? 'enabled' : ''}`} key={feature.key}><Switch label={`${feature.label} 피처 사용`} checked={on} onChange={() => toggleFeature(feature.key)} description={feature.description} />
               <RangeControl label={`${feature.label} 미리보기`} value={values[feature.key]} {...INPUT_LIMITS[feature.key]} min={feature.min} max={feature.max} step={feature.step} numberStep={['Hour', 'DayOfWeek'].includes(feature.key) ? 1 : 'any'} suffix={feature.unit} hint={feature.hint} disabled={!on} format={feature.key === 'DayOfWeek' ? value => DAYS[value] : undefined} onChange={value => setValues(previous => ({ ...previous, [feature.key]: value }))} />

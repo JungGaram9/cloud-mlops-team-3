@@ -20,7 +20,8 @@ from swagger_ui_bundle import swagger_ui_path
 
 from models.model import (FEATURES, REPORTS_DIR, ROOT, WEIGHTS_DIR, SensorInput, current_version,
                           load_model, model_versions, predict_one, valid_version, weight_path)
-from models.train import JOBS_DIR, TrainingConfig, load_dataset, write_json
+from models.train import (JOBS_DIR, TEST_SETS, TRAINING_SOURCES, TrainingConfig, combined_summary,
+                          concat_datasets, load_test_sets, load_training_sources, write_json)
 
 
 class Prediction(BaseModel):
@@ -207,8 +208,9 @@ def create_app(model_path: Path | None = None) -> FastAPI:
     @application.get("/training/options", summary="기본 설정과 데이터 피처 분포", tags=["학습"])
     def training_options():
         if application.state.catalog is None:
-            source = load_dataset(ROOT / "data/training_dataset.csv")
-            test = load_dataset(ROOT / "data/test_dataset.csv")
+            sources = load_training_sources()
+            tests = load_test_sets()
+            source = concat_datasets(list(sources.values()))
             import numpy as np
             profiles = []
             for index, name in enumerate(FEATURES):
@@ -217,8 +219,12 @@ def create_app(model_path: Path | None = None) -> FastAPI:
                 profiles.append({"key": name, "minimum": float(values.min()), "maximum": float(values.max()),
                                  "median": float(np.median(values))})
             application.state.catalog = {"defaults": TrainingConfig().model_dump(), "features": profiles,
-                                         "training_data": source.summary, "test_data": test.summary,
-                                         "split_strategy": "chronological",
+                                         "training_data": combined_summary(sources), "test_data": combined_summary(tests),
+                                         "training_sources": [{"key": key, "label": spec["label"], "file": spec["file"],
+                                                               "rows": len(sources[key].y)} for key, spec in TRAINING_SOURCES.items()],
+                                         "test_sets": [{"key": key, "label": spec["label"], "file": spec["file"],
+                                                        "rows": len(tests[key].y)} for key, spec in TEST_SETS.items()],
+                                         "split_strategy": "chronological per dataset",
                                          "config_schema": TrainingConfig.model_json_schema()}
         return application.state.catalog
 

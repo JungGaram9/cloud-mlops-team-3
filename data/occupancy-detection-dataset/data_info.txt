@@ -1,0 +1,17 @@
+Dataset Information
+The following data is collected from LoRa sensors of two rooms for a period of three months in an office building on the ground floor in Graz, Austria:
+Open status of windows/doors
+Relative humidity
+CO2 concentration
+Ambient temperature
+PIR-based motion counter
+Light level
+IR-based occupancy (only room A)
+Average/peak sound level
+Radar-based people counter (left-to-right and right-to-left; only room A; no trustworthy ground truth!)
+ 
+Folder Organization in occupancy-detection-dataset.zip
+
+    ├── data
+    │   ├── interim       <- Intermediate data of room A and B that has been transformed.
+    │   └── raw            <- The original, immutable sensor data dump of room A and B.
