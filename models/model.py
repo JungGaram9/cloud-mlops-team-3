@@ -22,6 +22,7 @@ ENCODING = "cyclic-time-v1"
 THRESHOLD, MIN_ACCURACY, SEED = 0.5, 0.85, 42
 MOCK_SENSORS = {"Temperature": 22.5, "Humidity": 45.0, "Light": 450.0, "CO2": 900.0,
                 "Hour": 14, "DayOfWeek": 2}
+_FINGERPRINT_CACHE: dict[str, tuple[tuple, str]] = {}
 
 
 class SensorInput(BaseModel):
@@ -175,6 +176,9 @@ def model_versions(active_version: str | None = None) -> dict:
     pairs = []
     paths = list(REPORTS_DIR.glob("*/light_comparison.json"))
     paths.sort(key=lambda path: int(valid_version(path.parent.name)[1:]), reverse=True)
+    listed_versions = {path.parent.name for path in paths}
+    for version in _FINGERPRINT_CACHE.keys() - listed_versions:
+        del _FINGERPRINT_CACHE[version]
     for path in paths:
         report = json.loads(path.read_text(encoding="utf-8"))
         version = valid_version(report["model_version"])
@@ -191,16 +195,32 @@ def model_versions(active_version: str | None = None) -> dict:
                 "training": training_settings,
                 "validation_metrics": variant.get("validation_metrics"),
                 "future_subset_metrics": variant.get("future_subset_metrics"),
+                "test_data": variant.get("test_data"),
+                "source_metrics": variant.get("source_metrics"),
                 "checkpoint_exists": weight_path(version, mode).is_file(),
             })
         ready = all(item["checkpoint_exists"] for item in models)
         signature = report.get("pair_fingerprint")
         if ready:
-            checkpoints = {
-                mode: torch.load(weight_path(version, mode), map_location="cpu", weights_only=True)
-                for mode in report["modes"]
-            }
-            signature = pair_fingerprint(checkpoints)
+            checkpoint_paths = {mode: weight_path(version, mode) for mode in report["modes"]}
+            file_state = []
+            for mode, checkpoint_path in sorted(checkpoint_paths.items()):
+                stat = checkpoint_path.stat()
+                file_state.append((mode, str(checkpoint_path.resolve()), stat.st_mtime_ns, stat.st_size))
+            file_state = tuple(file_state)
+            cached = _FINGERPRINT_CACHE.get(version)
+            # 파일 교체·모드 변경 시 재계산하고, 같은 버전의 이전 상태는 덮어쓴다.
+            if cached is None or cached[0] != file_state:
+                checkpoints = {
+                    mode: torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+                    for mode, checkpoint_path in checkpoint_paths.items()
+                }
+                signature = pair_fingerprint(checkpoints)
+                _FINGERPRINT_CACHE[version] = (file_state, signature)
+            else:
+                signature = cached[1]
+        else:
+            _FINGERPRINT_CACHE.pop(version, None)
         training_path = REPORTS_DIR / version / "training.json"
         training_report = json.loads(training_path.read_text(encoding="utf-8")) if training_path.is_file() else None
         pairs.append({
@@ -208,6 +228,7 @@ def model_versions(active_version: str | None = None) -> dict:
             "current": version == active_version,
             "created_at_utc": report["modes"]["with_light"]["created_at_utc"],
             "test_rows": report["test_rows"],
+            "test_data": report["modes"]["with_light"].get("test_data"),
             "models": models,
             "ready": ready,
             "fingerprint": signature,

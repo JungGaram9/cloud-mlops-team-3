@@ -4,12 +4,13 @@ import copy
 import csv
 import argparse
 import hashlib
+import io
 import json
 import os
 import platform
 import tempfile
 import time
-from collections import Counter
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib.metadata import version
@@ -24,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sklearn.metrics import (accuracy_score, average_precision_score, brier_score_loss,
                             confusion_matrix, f1_score, mean_absolute_error, precision_score,
                             recall_score, roc_auc_score)
+from scripts.runtime_logging import RuntimeLogger
 
 from models.model import (ENCODING, FEATURES, FEATURE_SETS, MIN_ACCURACY, REPORTS_DIR,
                           ROOT, SEED, SENSOR_FEATURES, THRESHOLD, WEIGHTS_DIR,
@@ -34,6 +36,7 @@ MAX_EPOCHS = 200
 PATIENCE = 30
 LEARNING_RATE = 0.01
 JOBS_DIR = REPORTS_DIR / "jobs"
+SPLIT_STRATEGY = "source_chronological"
 
 
 class TrainingConfig(BaseModel):
@@ -94,13 +97,28 @@ class Dataset:
     y: np.ndarray
     dates: list[datetime]
     summary: dict
+    sources: list[str] | None = None
+    raw: list[dict] | None = None
+
+    def select(self, indices, columns=None):
+        dates = [self.dates[index] for index in indices]
+        sources = [self.sources[index] for index in indices] if self.sources is not None else ["legacy"] * len(indices)
+        x = self.x[indices]
+        return Dataset(x if columns is None else x[:, columns], self.y[indices], dates,
+                       summarize(self.y[indices], dates, sources), sources,
+                       [self.raw[index] for index in indices] if self.raw is not None else None)
 
 
-def summarize(y: np.ndarray, dates: list[datetime]) -> dict:
-    return {"rows": len(y), "class_counts": dict(Counter(str(int(value)) for value in y)),
-            "first_timestamp": min(dates).isoformat(sep=" "),
-            "last_timestamp": max(dates).isoformat(sep=" "),
-            "duplicate_timestamps": len(dates) - len(set(dates))}
+def summarize(y: np.ndarray, dates: list[datetime], sources=None) -> dict:
+    result = {"rows": len(y), "class_counts": {"0": int(sum(y == 0)), "1": int(sum(y == 1))},
+              "first_timestamp": min(dates).isoformat(sep=" ") if dates else None,
+              "last_timestamp": max(dates).isoformat(sep=" ") if dates else None,
+              "duplicate_timestamps": len(dates) - len(set(dates))}
+    if sources is not None:
+        result["sources"] = {name: summarize(y[[i for i, value in enumerate(sources) if value == name]],
+                                            [date for date, value in zip(dates, sources) if value == name])
+                             for name in sorted(set(sources))}
+    return result
 
 
 def load_dataset(path: Path) -> Dataset:
@@ -111,7 +129,7 @@ def load_dataset(path: Path) -> Dataset:
         rows = list(reader)
     if not rows:
         raise ValueError(f"{path.name}: 데이터가 비어 있습니다.")
-    values, labels, dates = [], [], []
+    values, labels, dates, raw = [], [], [], []
     for line, row in enumerate(rows, start=2):
         try:
             date = datetime.fromisoformat(row["date"])
@@ -125,39 +143,152 @@ def load_dataset(path: Path) -> Dataset:
         values.append(input_vector(sensors))
         labels.append(int(label))
         dates.append(date)
+        raw.append(sensors.model_dump())
     x, y = np.asarray(values, dtype=np.float32), np.asarray(labels, dtype=np.int64)
-    summary = {**summarize(y, dates), "file": path.relative_to(ROOT).as_posix(),
-               "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
-    return Dataset(x, y, dates, summary)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    sources = ["legacy"] * len(rows)
+    metadata_path = path.parent / "dataset_sources.json"
+    source_digest = None
+    if metadata_path.is_file():
+        content = metadata_path.read_bytes()
+        recorded = json.loads(content)[path.name]
+        if recorded["sha256"] != digest or len(recorded["sources"]) != len(rows):
+            raise ValueError(f"{path.name}: 출처 메타데이터와 CSV 해시·행수가 일치하지 않습니다.")
+        sources = recorded["sources"]
+        if any(name not in ("legacy", "Room_A", "Room_B") for name in sources):
+            raise ValueError("알 수 없는 데이터 출처입니다.")
+        source_digest = hashlib.sha256(content).hexdigest()
+    summary = {**summarize(y, dates, sources), "file": path.relative_to(ROOT).as_posix(),
+               "sha256": digest, "source_metadata_sha256": source_digest}
+    return Dataset(x, y, dates, summary, sources, raw)
+
+
+def fit_input_limits(training: Dataset, features) -> dict:
+    """float32 변환 전의 실제 fit 관측값만 영속화한다."""
+    if training.raw is None:
+        raise ValueError("학습 원본 정밀도 입력값이 없습니다.")
+    profiles = {}
+    for name in features:
+        values = [row[name] for row in training.raw]
+        profiles[name] = {"minimum": min(values), "maximum": max(values)}
+        if name in ("Hour", "DayOfWeek"):
+            profiles[name]["values"] = sorted(set(values))
+    return {"available": True, "rows": len(training.y), "features": profiles,
+            "first_timestamp": training.summary["first_timestamp"],
+            "last_timestamp": training.summary["last_timestamp"],
+            "sources": training.summary.get("sources", {}), "split_strategy": SPLIT_STRATEGY}
+
+
+def training_input_limits(models: dict) -> dict:
+    """저장된 데이터 해시·학습 구간을 확인하고 원본 정밀도의 입력 범위를 복원한다."""
+    limits = {}
+    sources = {}
+    for mode, model in models.items():
+        try:
+            if "input_limits" in model:
+                limits[mode] = copy.deepcopy(model["input_limits"])
+                continue
+            if model.get("split_strategy") == SPLIT_STRATEGY:
+                raise ValueError("출처별 분할 모델의 저장된 fit 입력범위가 없습니다.")
+            data = model["training_data"]
+            split = model["training_split"]
+            path = (ROOT / data["file"]).resolve()
+            if path.parent != (ROOT / "data").resolve() or path.suffix != ".csv":
+                raise ValueError("기록된 원본 학습 CSV를 확인할 수 없습니다.")
+            if path not in sources:
+                content = path.read_bytes()
+                rows = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+                sources[path] = (hashlib.sha256(content).hexdigest(),
+                                 [(datetime.fromisoformat(row["date"]), row) for row in rows])
+            source_hash, records = sources[path]
+            if source_hash != data["sha256"]:
+                raise ValueError("원본 CSV가 모델에 기록된 학습 데이터 해시와 다릅니다.")
+            first = datetime.fromisoformat(split["first_timestamp"])
+            last = datetime.fromisoformat(split["last_timestamp"])
+            training_rows = [(date, row) for date, row in records if first <= date <= last]
+            if (len(training_rows) != split["rows"] or not training_rows
+                    or min(date for date, _ in training_rows) != first
+                    or max(date for date, _ in training_rows) != last):
+                raise ValueError("기록된 학습 구간의 시각·행수를 재구성할 수 없습니다.")
+            observed = [SensorInput(**{name: float(row[name]) for name in SENSOR_FEATURES},
+                                    Hour=date.hour, DayOfWeek=date.weekday()).model_dump()
+                        for date, row in training_rows]
+            features = {}
+            for name in model["features"]:
+                values = [row[name] for row in observed]
+                features[name] = {"minimum": min(values), "maximum": max(values)}
+                if name in ("Hour", "DayOfWeek"):
+                    features[name]["values"] = sorted(set(values))
+            limits[mode] = {"available": True, "rows": len(training_rows),
+                            "first_timestamp": split["first_timestamp"], "last_timestamp": split["last_timestamp"],
+                            "features": features}
+        except (OSError, KeyError, ValueError, TypeError) as error:
+            limits[mode] = {"available": False, "features": {},
+                            "error": f"입력 제한을 준비할 수 없습니다: {error}"}
+    return limits
 
 
 def split_training(source: Dataset, validation_ratio: float = 0.2) -> tuple[Dataset, Dataset]:
-    order = sorted(range(len(source.y)), key=lambda index: source.dates[index])
-    split = int(len(order) * (1 - validation_ratio))
-    datasets = []
-    for indices in (order[:split], order[split:]):
-        if not indices or set(source.y[indices]) != {0, 1}:
-            raise ValueError("시간순 학습·검증 구간에 두 정답 클래스가 모두 필요합니다.")
-        dates = [source.dates[index] for index in indices]
-        y = source.y[indices]
-        datasets.append(Dataset(source.x[indices], y, dates, summarize(y, dates)))
-    if max(datasets[0].dates) >= min(datasets[1].dates):
-        raise ValueError("학습·검증 구간의 시점이 겹칩니다.")
-    return datasets[0], datasets[1]
+    groups = source.sources if source.sources is not None else ["legacy"] * len(source.y)
+    fit_indices, validation_indices = [], []
+    for name in sorted(set(groups)):
+        order = sorted((i for i, value in enumerate(groups) if value == name), key=lambda i: source.dates[i])
+        split = int(len(order) * (1 - validation_ratio))
+        while 0 < split < len(order) and source.dates[order[split - 1]] == source.dates[order[split]]:
+            split -= 1
+        if not 0 < split < len(order):
+            raise ValueError(f"{name}: 같은 시각 그룹을 유지하면서 fit/validation을 나눌 수 없습니다.")
+        fit_indices.extend(order[:split])
+        validation_indices.extend(order[split:])
+    training, validation = source.select(fit_indices), source.select(validation_indices)
+    if any(set(part.y) != {0, 1} for part in (training, validation)):
+        raise ValueError("전체 fit·validation 구간에 두 정답 클래스가 모두 필요합니다.")
+    return training, validation
+
+
+def training_plan(source: Dataset, test: Dataset, validation_ratio: float) -> dict:
+    plan = {"ready": False, "errors": [], "warnings": [], "split_strategy": SPLIT_STRATEGY,
+            "validation_ratio": validation_ratio, "test": test.summary}
+    try:
+        audit_split(source, test)
+        training, validation = split_training(source, validation_ratio)
+        plan.update(fit=training.summary, validation=validation.summary)
+        names = set(source.sources or ["legacy"]) | set(test.sources or ["legacy"])
+        for name in sorted(names):
+            for label, part in (("fit", training), ("validation", validation), ("test", test)):
+                stats = part.summary["sources"].get(name)
+                if stats is None:
+                    if label == "test":
+                        plan["warnings"].append(f"{name}: 평가 행이 없습니다.")
+                    else:
+                        plan["errors"].append(f"{name}: {label} 행이 없습니다.")
+                elif not all(stats["class_counts"].get(value, 0) for value in ("0", "1")):
+                    plan["warnings"].append(f"{name} {label}: 단일 클래스이며 일부 평가 지표가 제한됩니다.")
+        plan["ready"] = not plan["errors"]
+    except ValueError as error:
+        plan["errors"].append(str(error))
+    return plan
 
 
 def audit_split(training: Dataset, test: Dataset) -> dict:
-    shared_timestamps = len(set(training.dates) & set(test.dates))
-    training_records = {(date, *row, label) for date, row, label in zip(training.dates, training.x, training.y)}
-    test_records = {(date, *row, label) for date, row, label in zip(test.dates, test.x, test.y)}
+    training_sources = training.sources or ["legacy"] * len(training.y)
+    test_sources = test.sources or ["legacy"] * len(test.y)
+    shared_timestamps = len(set(zip(training_sources, training.dates)) & set(zip(test_sources, test.dates)))
+    training_records = {(name, date, *row, label) for name, date, row, label in
+                        zip(training_sources, training.dates, training.x, training.y)}
+    test_records = {(name, date, *row, label) for name, date, row, label in zip(test_sources, test.dates, test.x, test.y)}
     shared_records = len(training_records & test_records)
     if shared_timestamps or shared_records:
         raise ValueError("학습·평가 파일에 같은 시점 또는 동일한 기록이 있습니다.")
-    first_training_time = min(training.dates)
-    last_training_time = max(training.dates)
+    boundaries = {name: (min(date for group, date in zip(training_sources, training.dates) if group == name),
+                         max(date for group, date in zip(training_sources, training.dates) if group == name))
+                  for name in set(training_sources)}
     return {"shared_timestamps": shared_timestamps, "shared_records": shared_records,
-            "test_rows_before_training": sum(date < first_training_time for date in test.dates),
-            "test_rows_after_training": sum(date > last_training_time for date in test.dates)}
+            "timestamp_scope": "source_and_timestamp",
+            "test_rows_before_training": sum(name in boundaries and date < boundaries[name][0]
+                                             for name, date in zip(test_sources, test.dates)),
+            "test_rows_after_training": sum(name in boundaries and date > boundaries[name][1]
+                                            for name, date in zip(test_sources, test.dates))}
 
 
 def evaluate(labels: np.ndarray, values: np.ndarray, threshold: float = THRESHOLD) -> dict:
@@ -166,8 +297,8 @@ def evaluate(labels: np.ndarray, values: np.ndarray, threshold: float = THRESHOL
             "precision": float(precision_score(labels, predicted, zero_division=0)),
             "recall": float(recall_score(labels, predicted, zero_division=0)),
             "f1": float(f1_score(labels, predicted, zero_division=0)),
-            "roc_auc": float(roc_auc_score(labels, values)),
-            "average_precision": float(average_precision_score(labels, values)),
+            "roc_auc": float(roc_auc_score(labels, values)) if len(set(labels)) == 2 else None,
+            "average_precision": float(average_precision_score(labels, values)) if len(set(labels)) == 2 else None,
             "probability_mae": float(mean_absolute_error(labels, values)),
             "brier_score": float(brier_score_loss(labels, values)),
             "confusion_matrix": confusion_matrix(labels, predicted, labels=[0, 1]).tolist()}
@@ -264,7 +395,7 @@ def train_network(training: Dataset, validation: Dataset, config: TrainingConfig
     training_info = {
         **config.model_dump(), "max_epochs": config.epochs, "epochs_run": epoch, "best_epoch": best_epoch,
         "effective_batch_size": min(batch_size, len(x_train)), "history": history,
-        "best_validation_loss": best_loss, "selection": "시간순 검증 구간의 BCE 손실 최소화",
+        "best_validation_loss": best_loss, "selection": "출처별 시간순 검증 구간의 BCE 손실 최소화",
     }
     return network, {"mean": mean, "scale": scale}, training_info
 
@@ -282,8 +413,8 @@ def train_variant(mode: str, source: Dataset, test: Dataset, audit: dict,
     all_encoded_features = encoded_features(FEATURES)
     selected_encoded_features = encoded_features(features)
     columns = [all_encoded_features.index(name) for name in selected_encoded_features]
-    source = Dataset(source.x[:, columns], source.y, source.dates, source.summary)
-    test = Dataset(test.x[:, columns], test.y, test.dates, test.summary)
+    source = Dataset(source.x[:, columns], source.y, source.dates, source.summary, source.sources, source.raw)
+    test = Dataset(test.x[:, columns], test.y, test.dates, test.summary, test.sources, test.raw)
     training, validation = split_training(source, config.validation_ratio)
     network, scaler, training_info = train_network(training, validation, config, progress)
     test_probabilities = probabilities(network, test.x, scaler)
@@ -299,6 +430,8 @@ def train_variant(mode: str, source: Dataset, test: Dataset, audit: dict,
         "python_version": platform.python_version(),
         "packages": {name: version(name) for name in ("torch", "numpy", "scikit-learn")},
         "training_data": source.summary,
+        "test_data": test.summary, "split_strategy": SPLIT_STRATEGY,
+        "input_limits": fit_input_limits(training, features),
         "training_split": training.summary, "validation_split": validation.summary, "training": training_info,
     }
     report = {
@@ -308,14 +441,22 @@ def train_variant(mode: str, source: Dataset, test: Dataset, audit: dict,
         "model_metrics": metrics,
         "baseline": {"description": "학습 구간의 사용 비율을 모든 평가 행에 동일하게 반환",
                      "training_occupancy_rate": rate, "metrics": evaluate(test.y, np.full(len(test.y), rate), config.threshold)},
-        "evaluation_notes": ["학습 파일을 설정한 비율로 시간순 분할하고 각 모델의 검증 손실로 가중치를 선택합니다.",
+        "evaluation_notes": ["출처별 시간순 fit/validation 분할이며, 평가 파일은 두 구간에 포함하지 않습니다.",
                              "평가 정답으로 가중치·임계값을 조정하지 않습니다.",
                              "평가 파일에는 학습 기간 이전·이후 시점이 함께 있습니다.",
                              "Hour와 DayOfWeek는 CSV date에서 추출하며 학습·예측이 같은 주기 변환을 사용합니다."],
     }
-    last_training_time = max(source.dates)
-    future_mask = np.array([date > last_training_time for date in test.dates])
-    if len(set(test.y[future_mask])) == 2:
+    test_groups = test.sources or ["legacy"] * len(test.y)
+    report["source_metrics"] = {}
+    for name in sorted(set(test_groups) | set(source.sources or ["legacy"])):
+        indices = [i for i, value in enumerate(test_groups) if value == name]
+        report["source_metrics"][name] = {
+            "rows": len(indices), "class_counts": {"0": int(sum(test.y[indices] == 0)), "1": int(sum(test.y[indices] == 1))},
+            "metrics": evaluate(test.y[indices], test_probabilities[indices], config.threshold) if indices else None}
+    last_times = {name: stats["last_timestamp"] for name, stats in source.summary["sources"].items()}
+    future_mask = np.array([name in last_times and date > datetime.fromisoformat(last_times[name])
+                            for name, date in zip(test_groups, test.dates)])
+    if future_mask.any():
         report["future_subset_metrics"] = evaluate(test.y[future_mask], test_probabilities[future_mask], config.threshold)
     print(f"{mode}: 정확도 {metrics['accuracy']:.2%}, F1 {metrics['f1']:.4f}")
     return report, {**metadata, "state_dict": network.state_dict(), **scaler}
@@ -336,7 +477,23 @@ def write_training_report(directory: Path, training_report: dict) -> None:
         lines.append(f"| {label} | {', '.join(report['features'])} | {metrics['accuracy']:.2%} | "
                      f"{metrics['precision']:.2%} | {metrics['recall']:.2%} | {metrics['f1']:.4f} | "
                      f"{report['training']['best_epoch']} |")
+    primary = next(iter(training_report["models"].values()))
+    lines.extend(["", "## 출처별 분할", "", "| 출처 | fit | validation | test |", "|---|---:|---:|---:|"])
+    for name in primary["training_split"].get("sources", {}):
+        counts = [part.get("sources", {}).get(name, {}).get("rows", 0)
+                  for part in (primary["training_split"], primary["validation_split"], primary["test_data"])]
+        lines.append(f"| {name} | {' | '.join(str(count) for count in counts)} |")
+    for mode, report in training_report["models"].items():
+        lines.extend(["", f"## {mode} 출처별 평가", "", "| 출처 | 행수 | 비어 있음 / 사용 중 | 정밀도 | 재현율 | F1 |",
+                      "|---|---:|---|---:|---:|---:|"])
+        for name, result in report.get("source_metrics", {}).items():
+            metrics = result["metrics"]
+            values = " | ".join(f"{metrics[key]:.4f}" if metrics else "기록 없음" for key in ("precision", "recall", "f1"))
+            classes = result["class_counts"]
+            lines.append(f"| {name} | {result['rows']} | {classes['0']} / {classes['1']} | {values} |")
     lines.extend(["", "검증 손실이 가장 낮은 가중치를 선택했습니다. 손실 곡선과 데이터 해시는 training.json에 보존합니다.",
+                  "출처별 시간순 fit/validation 분할을 사용합니다. 출처는 신경망 입력 피처가 아닙니다.",
+                  f"평가 CSV SHA-256: {next(iter(training_report['models'].values()))['test_data']['sha256']}",
                   "전체 평가 파일은 학습 기간 이전·이후 기록을 포함하므로 순수한 미래 예측 성능이 아닙니다.",
                   "피처 제거·설정 변경으로 85% 미만이 되어도 실험 모델을 보존합니다."])
     (directory / "training.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -366,14 +523,14 @@ def save_model_pair(checkpoints: dict, reports: dict, weights_dir: Path = WEIGHT
         for mode in checkpoints:
             checkpoints[mode]["version"] = selected_version
             reports[mode]["version"] = selected_version
-        primary = reports["with_light"]
-        secondary = reports.get("without_light")
+        primary_model = reports["with_light"]
+        comparison_model = reports.get("without_light")
         accuracy_difference = None
-        if secondary:
-            accuracy_difference = (primary["model_metrics"]["accuracy"] - secondary["model_metrics"]["accuracy"]) * 100
+        if comparison_model:
+            accuracy_difference = (primary_model["model_metrics"]["accuracy"] - comparison_model["model_metrics"]["accuracy"]) * 100
         comparison = {
             "model_version": selected_version, "pair_fingerprint": signature,
-            "test_rows": primary["test_data"]["rows"], "threshold": primary["threshold"], "modes": reports,
+            "test_rows": primary_model["test_data"]["rows"], "threshold": primary_model["threshold"], "modes": reports,
             "accuracy_difference_percentage_points": accuracy_difference,
             "notes": ["웹에서 학습을 시작할 때마다 완료된 새 모델 버전을 기록하며 기존 가중치를 덮어쓰지 않습니다.",
                       "동일한 모델 식별값은 재현된 모델임을 이력에서 표시합니다.",
@@ -390,7 +547,7 @@ def save_model_pair(checkpoints: dict, reports: dict, weights_dir: Path = WEIGHT
                     torch.save(checkpoints[mode], weight_staging / filename)
             report_staging = Path(report_temporary) / selected_version
             report_staging.mkdir()
-            write_json(report_staging / "metrics.json", primary)
+            write_json(report_staging / "metrics.json", primary_model)
             write_json(report_staging / "light_comparison.json", comparison)
             if training_report:
                 training_report = {**training_report, "model_version": selected_version,
@@ -414,15 +571,23 @@ class TrainingCancelled(Exception):
 
 
 def train_experiment(config: TrainingConfig, *, weights_dir=WEIGHTS_DIR, reports_dir=REPORTS_DIR,
-                     job_id=None, progress=None, force_new=True) -> str:
+                     job_id=None, progress=None, force_new=True, logger=None) -> str:
     weights_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     source = load_dataset(ROOT / "data/training_dataset.csv")
     test = load_dataset(ROOT / "data/test_dataset.csv")
+    plan = training_plan(source, test, config.validation_ratio)
+    logger = logger or RuntimeLogger.for_training()
+    logger.write("model", "training", event="data_prepared", job_id=job_id, config=config.model_dump(),
+                 seed=config.seed, training_data=source.summary, test_data=test.summary, data_plan=plan)
+    if not plan["ready"]:
+        raise ValueError(" / ".join(plan["errors"]))
     audit = audit_split(source, test)
-    variants = {"with_light": config.features}
-    if config.compare_light and "Light" in config.features and len(config.features) > 1:
-        variants["without_light"] = [name for name in config.features if name != "Light"]
+    # with_light는 호환용 계약 키이며 실제 선택 피처에는 조도가 없을 수도 있다.
+    primary_features = config.features
+    variants = {"with_light": primary_features}
+    if config.compare_light and "Light" in primary_features and len(primary_features) > 1:
+        variants["without_light"] = [name for name in primary_features if name != "Light"]
     reports, checkpoints = {}, {}
     for index, (mode, features) in enumerate(variants.items()):
         callback = None
@@ -441,7 +606,7 @@ def train_experiment(config: TrainingConfig, *, weights_dir=WEIGHTS_DIR, reports
             "config": config.model_dump(),
             "duration_seconds": round(time.monotonic() - started, 3),
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
-            "split_strategy": "chronological",
+            "split_strategy": SPLIT_STRATEGY, "data_plan": plan,
             "data_audit": audit,
         }
         return save_model_pair(checkpoints, reports, weights_dir, reports_dir, force_new=force_new,
@@ -451,7 +616,10 @@ def train_experiment(config: TrainingConfig, *, weights_dir=WEIGHTS_DIR, reports
 def run_training_job(job_id: str, jobs_dir=JOBS_DIR, weights_dir=WEIGHTS_DIR, reports_dir=REPORTS_DIR):
     path = jobs_dir / f"{job_id}.json"
     record = json.loads(path.read_text(encoding="utf-8"))
+    logger = RuntimeLogger.for_training(record)
+    record.update(log_run_id=logger.run_id, log_root=str(logger.root))
     config = TrainingConfig(**record["config"])
+    logger.write("model", "training", event="started", job_id=job_id, config=config.model_dump(), seed=config.seed)
     record.update(status="running", pid=os.getpid(), started_at_utc=datetime.now(timezone.utc).isoformat(),
                   progress=0, phase="데이터 준비", curves={})
     write_json(path, record)
@@ -463,12 +631,14 @@ def run_training_job(job_id: str, jobs_dir=JOBS_DIR, weights_dir=WEIGHTS_DIR, re
         if cancel_path.is_file():
             raise TrainingCancelled()
         if point:
+            logger.epoch(job_id, mode, point)
             record["curves"].setdefault(mode, []).append(point)
             completed_fraction = (index + point["epoch"] / config.epochs) / total
             record.update(phase="선택 모델 학습" if mode == "with_light" else "조도 제외 모델 학습",
                           epoch=point["epoch"], mode=mode,
                           progress=min(95, round(completed_fraction * 95, 1)))
         elif mode == "saving":
+            logger.write("model", "training", event="saving", job_id=job_id)
             record.update(phase="평가 및 버전 저장", progress=98)
         if time.monotonic() - last_written > 0.4 or mode == "saving":
             write_json(path, record)
@@ -479,15 +649,16 @@ def run_training_job(job_id: str, jobs_dir=JOBS_DIR, weights_dir=WEIGHTS_DIR, re
         with FileLock(weights_dir / ".training.lock", timeout=0):
             progress("loading", 0, 1, None)
             model_version = train_experiment(config, weights_dir=weights_dir, reports_dir=reports_dir,
-                                             job_id=job_id, progress=progress)
+                                             job_id=job_id, progress=progress, logger=logger)
         record.update(status="completed", version=model_version, progress=100, phase="학습 완료")
     except TrainingCancelled:
         record.update(status="cancelled", phase="학습 중지", error=None)
     except Exception as error:
-        record.update(status="failed", phase="학습 실패", error=str(error))
+        record.update(status="failed", phase="학습 실패", error=str(error), error_type=type(error).__name__)
     finally:
         record["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
         write_json(path, record)
+        logger.training_finished(record, reports_dir)
 
 
 def main() -> None:
@@ -511,18 +682,33 @@ def main() -> None:
         print(f"저장된 기본 모델 {model_version} 사용: 추가 학습 버전을 만들지 않습니다.")
         return
     WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
+    logger = RuntimeLogger.for_training()
+    direct_job_id = f"bootstrap-{uuid.uuid4().hex}"
+    config = TrainingConfig()
+    logger.write("model", "training", event="started", job_id=direct_job_id, config=config.model_dump(), seed=config.seed)
     try:
         with FileLock(WEIGHTS_DIR / ".training.lock", timeout=0):
-            source = load_dataset(ROOT / "data" / "training_dataset.csv")
-            test = load_dataset(ROOT / "data" / "test_dataset.csv")
+            source = load_dataset(ROOT / "data/training_dataset.csv")
+            test = load_dataset(ROOT / "data/test_dataset.csv")
             audit = audit_split(source, test)
+            plan = training_plan(source, test, config.validation_ratio)
+            logger.write("model", "training", event="data_prepared", job_id=direct_job_id,
+                         training_data=source.summary, test_data=test.summary, data_plan=plan)
+            if not plan["ready"]:
+                raise ValueError(" / ".join(plan["errors"]))
             reports, checkpoints = {}, {}
             for mode in FEATURE_SETS:
-                reports[mode], checkpoints[mode] = train_variant(mode, source, test, audit)
+                reports[mode], checkpoints[mode] = train_variant(mode, source, test, audit,
+                    progress=lambda point, mode=mode: logger.epoch(direct_job_id, mode, point))
             require_accuracy(reports["with_light"]["model_metrics"])
-            save_model_pair(checkpoints, reports)
-    except Timeout as error:
-        raise RuntimeError("다른 학습이 실행 중입니다. 완료 후 다시 실행하세요.") from error
+            selected_version = save_model_pair(checkpoints, reports)
+        logger.training_finished({"id": direct_job_id, "status": "completed", "version": selected_version}, REPORTS_DIR)
+    except Exception as error:
+        logger.training_finished({"id": direct_job_id, "status": "failed", "error": str(error),
+                                  "error_type": type(error).__name__}, REPORTS_DIR)
+        if isinstance(error, Timeout):
+            raise RuntimeError("다른 학습이 실행 중입니다. 완료 후 다시 실행하세요.") from error
+        raise
 
 
 if __name__ == "__main__":

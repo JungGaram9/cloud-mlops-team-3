@@ -7,6 +7,10 @@ __pycache__/
 /reports/.pending-*/
 /reports/jobs/
 /reports/ui/
+/logs/
+/state/
+/data/occupancy-detection-dataset.zip
+/data/occupancy-detection-dataset/
 **/.write-*.tmp
 /frontend/node_modules/
 /frontend/dist/
