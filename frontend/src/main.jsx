@@ -142,6 +142,11 @@ function FeatureTags({ features = [] }) {
 const SOURCE_LABELS = { legacy: '기존 자료', Room_A: 'Room A', Room_B: 'Room B' };
 const splitLabel = strategy => strategy === 'source_chronological' ? '출처별 시간순' : '전체 시간순 (기존 방식)';
 
+function reusableTrainingConfig(stored, defaults) {
+  // 이전 버전의 전용 데이터 옵션을 새 학습 API로 다시 전달하지 않는다.
+  return Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, Object.hasOwn(stored, key) ? stored[key] : value]));
+}
+
 function evaluationGroups(versions) {
   const groups = new Map();
   for (const item of versions) {
@@ -784,10 +789,13 @@ function ModelManagement() {
   }
 
   function reuse() {
-    const next = report?.config || { ...options.defaults, features: report.models.with_light.features };
+    const stored = report?.config || { features: report.models.with_light.features };
+    const next = reusableTrainingConfig(stored, options.defaults);
     setConfig({ ...next, name: `${selected} 기반 실험`, make_default: false });
     setTab('training');
-    setMessage(report.config ? `${selected}의 학습 설정을 불러왔습니다.` : `${selected}의 피처를 불러왔습니다. 저장되지 않은 설정은 기본값으로 시작합니다.`);
+    const legacyOptions = Object.keys(stored).filter(key => !Object.hasOwn(options.defaults, key));
+    setMessage(legacyOptions.length ? `${selected}의 설정을 불러왔습니다. 이전 전용 옵션(${legacyOptions.join(', ')})은 제외하고 현재 통합 CSV의 출처별 분할을 사용합니다.`
+      : report.config ? `${selected}의 학습 설정을 불러왔습니다.` : `${selected}의 피처를 불러왔습니다. 저장되지 않은 설정은 기본값으로 시작합니다.`);
   }
 
   async function inspectJob(item) {

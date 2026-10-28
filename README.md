@@ -219,6 +219,8 @@ curl http://localhost:8000/compare?version=v3 --json @backend/examples/mock_sens
 
 이 세 데이터 파일은 `.gitattributes`로 Git의 줄바꿈 자동 변환을 끕니다. Windows와 Linux에서 체크아웃한 바이트·SHA-256이 같아야 출처 검증을 통과할 수 있습니다.
 
+`models/prepare_data.py`와 `graz_*.csv`는 이전 v7의 전처리·평가 자료로 보존하며 현재 학습 경로에는 연결하지 않습니다. 현재 학습은 통합 CSV 두 개와 출처 메타데이터만 사용합니다. v7 가중치·보고서는 읽을 수 있지만 원본 학습 범위를 검증할 수 없으면 입력 제한을 복원하지 않습니다. 이전 설정을 불러올 때는 현재 API가 지원하는 항목만 적용하고, 이전 전용 데이터 선택 옵션은 제외했다고 표시합니다.
+
 ## 검증과 중지
 
 ```cmd

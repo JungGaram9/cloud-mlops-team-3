@@ -185,13 +185,15 @@ def training_input_limits(models: dict) -> dict:
     sources = {}
     for mode, model in models.items():
         try:
-            if "input_limits" in model:
+            if model.get("input_limits") is not None:
                 limits[mode] = copy.deepcopy(model["input_limits"])
                 continue
             if model.get("split_strategy") == SPLIT_STRATEGY:
                 raise ValueError("출처별 분할 모델의 저장된 fit 입력범위가 없습니다.")
             data = model["training_data"]
             split = model["training_split"]
+            if not data.get("file"):
+                raise ValueError("이전 다중 데이터 모델의 학습 범위는 현재 통합 CSV로 검증할 수 없습니다.")
             path = (ROOT / data["file"]).resolve()
             if path.parent != (ROOT / "data").resolve() or path.suffix != ".csv":
                 raise ValueError("기록된 원본 학습 CSV를 확인할 수 없습니다.")

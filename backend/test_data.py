@@ -180,3 +180,14 @@ class DataTests(unittest.TestCase):
             versions = model.model_versions("v1")["versions"]
         self.assertEqual([item["test_data"]["sha256"] for item in versions], ["b" * 64, "a" * 64])
         self.assertTrue(all(item["test_data"]["rows"] == item["test_rows"] for item in versions))
+
+    def test_v7_weights_and_legacy_report_remain_readable(self):
+        report = json.loads((model.REPORTS_DIR / "v7/light_comparison.json").read_text(encoding="utf-8"))
+        for mode in report["modes"]:
+            saved = model.load_model(model.weight_path("v7", mode))
+            self.assertEqual(saved.metadata["version"], "v7")
+            self.assertFalse(saved.network.training)
+        limits = train.training_input_limits(report["modes"])
+        for limit in limits.values():
+            self.assertFalse(limit["available"])
+            self.assertIn("이전 다중 데이터", limit["error"])

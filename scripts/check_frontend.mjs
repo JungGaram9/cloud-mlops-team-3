@@ -12,7 +12,7 @@ const server = await createServer({
   plugins: [react(), { name: 'verify-components', enforce: 'pre', transform(source, id) {
     if (!id.endsWith('/src/main.jsx')) return;
     return source.slice(0, source.indexOf('const reactRoot ='))
-      + '\nexport { evaluationGroups, Dashboard, TrainingForm, ReportPanel, DEFAULT_CONFIG, PRESETS };';
+      + '\nexport { evaluationGroups, Dashboard, TrainingForm, ReportPanel, reusableTrainingConfig, DEFAULT_CONFIG, PRESETS };';
   } }],
 });
 try {
@@ -64,6 +64,14 @@ try {
   assert.match(html, /출처별 평가/);
   assert.match(html, /b{64}/);
   assert.match(html, /출처별 시간순/);
+  const oldReport = JSON.parse(await fs.readFile('/app/reports/v7/training.json', 'utf8'));
+  const oldHtml = renderToStaticMarkup(React.createElement(ui.ReportPanel, { report: oldReport, version: 'v7' }));
+  assert.match(oldHtml, /v7 학습 보고서/);
+  const imported = ui.reusableTrainingConfig(oldReport.config, ui.DEFAULT_CONFIG);
+  assert.equal(Object.hasOwn(imported, 'datasets'), false);
+  assert.deepEqual(imported.features, oldReport.config.features);
+  assert.equal(imported.activation, oldReport.config.activation);
+  assert.deepEqual(Object.keys(imported).sort(), Object.keys(ui.DEFAULT_CONFIG).sort());
   console.log('PASS: JSX rendering; SHA-256 + row grouping; per-group best; source distributions; preflight disable; preview form ownership');
 } finally {
   await server.close();
