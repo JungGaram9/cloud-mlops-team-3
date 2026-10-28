@@ -9,15 +9,17 @@ WORKDIR /app
 COPY backend/requirements*.txt /app/backend/
 RUN --mount=type=cache,target=/root/.cache/pip python -m pip install -r backend/requirements.txt
 
-COPY data/training_dataset.csv data/test_dataset.csv data/graz_room_a_train.csv data/graz_room_a_test.csv data/graz_room_b_test.csv /app/data/
+COPY data/training_dataset.csv data/test_dataset.csv /app/data/
+COPY data/dataset_sources.json /app/data/
+COPY scripts/merge_data.py /app/scripts/merge_data.py
+COPY scripts/runtime_logging.py /app/scripts/runtime_logging.py
 COPY backend/ /app/backend/
 COPY models/ /app/models/
 COPY reports/ /app/reports/
-# 기존 기본 모델은 그대로 사용하며 준비 과정에서 학습 이력을 추가하지 않는다.
-RUN python -m models.train
-RUN python -m unittest backend.test_app -v
+# 빌드에서는 학습·평가·학습 테스트를 실행하지 않는다. 초기 준비는 런타임 trainer가 담당한다.
 
-RUN useradd --create-home --uid 10001 classroom
+RUN useradd --create-home --uid 10001 classroom \
+    && mkdir -p /app/logs /app/state && chown classroom:classroom /app/logs /app/state
 USER classroom
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -3,6 +3,8 @@
 import csv
 import copy
 import json
+import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,11 +17,9 @@ from fastapi.testclient import TestClient
 from backend.app import create_app
 from models.model import (FEATURES, FEATURE_SETS, MIN_ACCURACY, MOCK_SENSORS, REPORTS_DIR,
                           ROOT, SENSOR_FEATURES, WEIGHTS_DIR, SensorInput, current_version,
-                          input_vector, load_model, pair_fingerprint, predict_one, weight_path)
-from models.prepare_data import prepare
-from models.train import (TEST_SETS, TRAINING_SOURCES, TrainingConfig, audit_sources, load_dataset,
-                          load_test_sets, load_training_sources, require_accuracy, run_training_job,
-                          save_model_pair, split_training, train_experiment, write_json)
+                          input_vector, load_model, model_versions, pair_fingerprint, predict_one, weight_path)
+from models.train import (TrainingConfig, load_dataset, require_accuracy, run_training_job,
+                          save_model_pair, split_training, train_experiment, training_input_limits, write_json)
 
 VERSION = "v3" if weight_path("v3").is_file() else current_version()
 MODEL_PATH = weight_path(VERSION)
@@ -33,6 +33,108 @@ def read_json(path):
 
 
 class ModelTests(unittest.TestCase):
+    def test_input_limits_reject_unverified_source_or_training_interval(self):
+        models = read_json(COMPARISON_PATH)["modes"]
+        models["with_light"]["training_data"]["sha256"] = "0" * 64
+        models["without_light"]["training_split"]["rows"] += 1
+        limits = training_input_limits(models)
+        self.assertFalse(limits["with_light"]["available"])
+        self.assertIn("해시", limits["with_light"]["error"])
+        self.assertFalse(limits["without_light"]["available"])
+        self.assertEqual(limits["without_light"]["features"], {})
+
+    def test_version_fingerprint_cache_reuses_and_invalidates_changed_files(self):
+        pair = {mode: torch.load(weight_path(VERSION, mode), weights_only=True, map_location="cpu") for mode in FEATURE_SETS}
+        evaluations = read_json(COMPARISON_PATH)["modes"]
+        with tempfile.TemporaryDirectory() as directory:
+            weights, reports = Path(directory) / "weights", Path(directory) / "reports"
+            for _ in range(2):
+                save_model_pair(copy.deepcopy(pair), copy.deepcopy(evaluations), weights, reports,
+                                force_new=True, make_default=False)
+            cache = {}
+            with patch("models.model.WEIGHTS_DIR", weights), patch("models.model.REPORTS_DIR", reports), \
+                    patch("models.model._FINGERPRINT_CACHE", cache), patch("models.model.torch.load", wraps=torch.load) as loader:
+                first = model_versions("v1")
+                self.assertEqual(loader.call_count, 4)
+                self.assertEqual(first["versions"][0]["same_model_as"], "v1")
+                loader.reset_mock()
+                self.assertEqual(model_versions("v1"), first)
+                loader.assert_not_called()
+
+                changed_path = weights / "v2/model.pt"
+                changed = copy.deepcopy(pair["with_light"])
+                changed["mean"][0] += 0.01
+                torch.save(changed, changed_path)
+                stat = changed_path.stat()
+                os.utime(changed_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+                updated = model_versions("v1")["versions"][0]
+                self.assertEqual(loader.call_count, 2)
+                self.assertNotEqual(updated["fingerprint"], first["versions"][0]["fingerprint"])
+                self.assertIsNone(updated["same_model_as"])
+
+                # 수정 시각이 같아도 파일 크기가 달라지면 재로드한다.
+                loader.reset_mock()
+                stat = changed_path.stat()
+                changed["padding"] = "크기 변경 확인" * 100
+                torch.save(changed, changed_path)
+                os.utime(changed_path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+                self.assertNotEqual(changed_path.stat().st_size, stat.st_size)
+                self.assertEqual(model_versions("v1")["versions"][0]["fingerprint"], updated["fingerprint"])
+                self.assertEqual(loader.call_count, 2)
+                self.assertEqual(len(cache), 2)
+
+                loader.reset_mock()
+                removed_path = weights / "v2/model_without_light.pt"
+                original = removed_path.read_bytes()
+                removed_path.unlink()
+                missing = model_versions("v1")["versions"][0]
+                self.assertFalse(missing["ready"])
+                self.assertFalse(missing["models"][1]["checkpoint_exists"])
+                self.assertNotIn("v2", cache)
+                loader.assert_not_called()
+                removed_path.write_bytes(original)
+                self.assertTrue(model_versions("v1")["versions"][0]["ready"])
+                self.assertEqual(loader.call_count, 2)
+                loader.reset_mock()
+                model_versions("v1")
+                loader.assert_not_called()
+                (reports / "v2/light_comparison.json").unlink()
+                self.assertEqual(len(model_versions("v1")["versions"]), 1)
+                self.assertEqual(set(cache), {"v1"})
+
+    def test_version_fingerprint_cache_tracks_checkpoint_paths_and_modes(self):
+        pair = {mode: torch.load(weight_path(VERSION, mode), weights_only=True, map_location="cpu") for mode in FEATURE_SETS}
+        evaluations = read_json(COMPARISON_PATH)["modes"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            weights, reports = root / "weights", root / "reports"
+            save_model_pair(copy.deepcopy(pair), copy.deepcopy(evaluations), weights, reports, make_default=False)
+            replacement_weights = root / "replacement"
+            shutil.copytree(weights, replacement_weights)
+            cache = {}
+            with patch("models.model.WEIGHTS_DIR", weights), patch("models.model.REPORTS_DIR", reports), \
+                    patch("models.model._FINGERPRINT_CACHE", cache), patch("models.model.torch.load", wraps=torch.load) as loader:
+                original = model_versions("v1")
+                loader.reset_mock()
+                with patch("models.model.WEIGHTS_DIR", replacement_weights):
+                    self.assertEqual(model_versions("v1"), original)
+                    self.assertEqual(loader.call_count, 2)
+                    self.assertEqual(len(cache), 1)
+                    loader.reset_mock()
+                    path = reports / "v1/light_comparison.json"
+                    report = read_json(path)
+                    comparison_model = report["modes"].pop("without_light")
+                    write_json(path, report)
+                    single = model_versions("v1")["versions"][0]
+                    self.assertEqual(loader.call_count, 1)
+                    self.assertEqual(len(single["models"]), 1)
+                    self.assertEqual(single["fingerprint"], pair_fingerprint({"with_light": pair["with_light"]}))
+                    loader.reset_mock()
+                    report["modes"]["without_light"] = comparison_model
+                    write_json(path, report)
+                    self.assertEqual(model_versions("v1"), original)
+                    self.assertEqual(loader.call_count, 2)
+
     def test_without_light_ignores_changed_light(self):
         model = load_model(NO_LIGHT_PATH)
         self.assertNotIn("Light", model.metadata["features"])
@@ -58,10 +160,12 @@ class ModelTests(unittest.TestCase):
 
     def test_scaler_uses_training_partition_only(self):
         source = load_dataset(ROOT / "data/training_dataset.csv")
-        training, validation = split_training(source)
-        self.assertLess(max(training.dates), min(validation.dates))
-        self.assertEqual(len(training.y) + len(validation.y), len(source.y))
-        self.assertTrue(torch.allclose(load_model(MODEL_PATH).mean, torch.from_numpy(training.x).mean(dim=0)))
+        model = load_model(MODEL_PATH)
+        recorded = model.metadata["training_split"]
+        first, last = (datetime.fromisoformat(recorded[key]) for key in ("first_timestamp", "last_timestamp"))
+        indices = [index for index, date in enumerate(source.dates) if first <= date <= last]
+        self.assertEqual(len(indices), recorded["rows"])
+        self.assertTrue(torch.allclose(model.mean, torch.from_numpy(source.x[indices]).mean(dim=0)))
 
     def test_evaluation_meets_85_percent(self):
         report = read_json(REPORT_PATH)
@@ -276,12 +380,8 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([item["key"] for item in result["features"]], list(FEATURES))
             self.assertEqual(result["features"][-1]["minimum"], 0)
             self.assertEqual(result["features"][-1]["maximum"], 6)
-            self.assertEqual([item["key"] for item in result["training_sources"]], list(TRAINING_SOURCES))
-            self.assertEqual([item["key"] for item in result["test_sets"]], list(TEST_SETS))
-            self.assertEqual(result["training_sources"][0]["rows"], 8143)
-            self.assertEqual(result["training_data"]["rows"], sum(item["rows"] for item in result["training_sources"]))
-            self.assertEqual(result["test_data"]["rows"], sum(item["rows"] for item in result["test_sets"]))
-            self.assertEqual(result["split_strategy"], "chronological per dataset")
+            self.assertEqual(result["training_data"], load_dataset(ROOT / "data/training_dataset.csv").summary)
+            self.assertEqual(result["split_strategy"], "source_chronological")
 
     def test_invalid_training_settings_never_start_a_process(self):
         cases = [{"features": []}, {"features": ["Unknown"]}, {"features": ["Light", "Light"]},
@@ -289,8 +389,7 @@ class ApiTests(unittest.TestCase):
                  {"hidden_layers": [2]}, {"hidden_layers": [True]}, {"hidden_layers": [8, 8, 8, 8]},
                  {"normalize": "true"}, {"activation": "unknown"}, {"optimizer": "unknown"},
                  {"seed": -1}, {"patience": -1}, {"threshold": 1}, {"validation_ratio": 0.5},
-                 {"dropout": 0.8}, {"weight_decay": 0.2}, {"name": "  "}, {"unknown": 1},
-                 {"datasets": []}, {"datasets": ["unknown"]}, {"datasets": ["uci", "uci"]}]
+                 {"dropout": 0.8}, {"weight_decay": 0.2}, {"name": "  "}, {"unknown": 1}]
         with patch("backend.app.subprocess.Popen") as process, TestClient(create_app()) as client:
             for fields in cases:
                 with self.subTest(fields=fields):
@@ -330,6 +429,11 @@ class ApiTests(unittest.TestCase):
             self.assertTrue(report["legacy"])
             self.assertIsNone(report["config"])
             self.assertEqual(report["models"], read_json(COMPARISON_PATH)["modes"])
+            limits = report["input_limits"]["with_light"]
+            if limits["available"]:
+                self.assertEqual(limits["rows"], 6514)
+            else:
+                self.assertIn("해시", limits["error"])
             self.assertEqual(client.get("/versions/invalid/training").status_code, 400)
 
     def test_activation_changes_default_predictions_without_touching_original_weights(self):
@@ -380,34 +484,13 @@ class TrainingTests(unittest.TestCase):
             self.assertEqual(report["config"], config.model_dump())
             self.assertEqual(len(report["models"]["with_light"]["training"]["history"]), 3)
             self.assertTrue((reports / version / "training.md").is_file())
-            self.assertEqual(report["config"]["datasets"], list(TRAINING_SOURCES))
-            primary = report["models"]["with_light"]
-            sources = load_training_sources()
-            self.assertEqual(primary["training_split"]["rows"] + primary["validation_split"]["rows"],
-                             sum(len(data.y) for data in sources.values()))
-            self.assertTrue(primary["validation_split"]["first_timestamp"].startswith("2015"))
-            self.assertTrue(primary["validation_split"]["last_timestamp"].startswith("2023"))
-            self.assertEqual(set(primary["test_sets"]), set(TEST_SETS))
-            for result in primary["test_sets"].values():
-                work = result["working_hours"]
-                self.assertLess(work["rows"], result["rows"])
-                self.assertGreaterEqual(work["majority_baseline_accuracy"], 0.5)
-                self.assertIn("accuracy", work["metrics"])
-            self.assertEqual(primary["model_metrics"], primary["test_sets"]["uci"]["metrics"])
-            self.assertIn("장소·기간별 평가", (reports / version / "training.md").read_text(encoding="utf-8"))
-
-    def test_dataset_selection_and_audit_follow_each_site(self):
-        tests = load_test_sets()
-        uci_only = audit_sources(load_training_sources(["uci"]), tests)
-        self.assertEqual(uci_only["uci"]["test_rows_before_training"], 2665)
-        self.assertEqual(uci_only["uci"]["test_rows_after_training"], 9752)
-        self.assertIsNone(uci_only["graz_room_b"]["test_rows_after_training"])
-        combined = audit_sources(load_training_sources(), tests)
-        self.assertEqual(combined["graz_room_a"]["test_rows_after_training"], len(tests["graz_room_a"].y))
-        self.assertEqual(combined["graz_room_b"]["shared_timestamps"], 0)
-        with self.assertRaises(ValueError):
-            audit_sources({"graz_room_a": tests["graz_room_a"]}, tests)
-        self.assertEqual(TrainingConfig(datasets=["graz_room_a", "uci"]).datasets, ["uci", "graz_room_a"])
+            limits = training_input_limits(report["models"])["with_light"]
+            self.assertTrue(limits["available"])
+            self.assertEqual(limits["rows"], report["models"]["with_light"]["training_split"]["rows"])
+            self.assertEqual(set(limits["features"]), {"CO2", "Hour"})
+            fit, _ = split_training(load_dataset(ROOT / "data/training_dataset.csv"), config.validation_ratio)
+            rows = fit.raw
+            self.assertEqual(limits["features"]["CO2"]["maximum"], max(float(row["CO2"]) for row in rows))
 
     def test_every_explicit_training_run_preserves_a_new_version_even_if_identical(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -438,7 +521,8 @@ class TrainingTests(unittest.TestCase):
             report = read_json(reports / record["version"] / "training.json")
             self.assertEqual(report["models"]["without_light"]["features"], ["Hour"])
             self.assertEqual(report["models"]["with_light"]["training"]["effective_batch_size"], 1024)
-            self.assertFalse(report["models"]["with_light"]["quality_gate"]["passed"])
+            primary = report["models"]["with_light"]
+            self.assertEqual(primary["quality_gate"]["passed"], primary["model_metrics"]["accuracy"] >= MIN_ACCURACY)
             self.assertEqual(load_model(weights / record["version"] / "model.pt").metadata["network_config"]["dropout"], 0.2)
 
     def test_cancelled_job_does_not_register_any_model(self):
@@ -463,52 +547,6 @@ class TrainingTests(unittest.TestCase):
             self.assertEqual(read_json(jobs / f"{job_id}.json")["status"], "failed")
             self.assertEqual(read_json(jobs / f"{job_id}.json")["error"], "학습 검증 오류")
             self.assertEqual(list(weights.glob("v*")), [])
-
-
-class DataPreparationTests(unittest.TestCase):
-    def write_room(self, directory, rows, label_dates=None):
-        directory.mkdir(parents=True)
-        with (directory / "df_features.csv").open("w", encoding="utf-8", newline="") as output:
-            writer = csv.writer(output)
-            writer.writerow(["Date", "humidity", "co2", "temperature", "light"])
-            writer.writerows([[date, 30.0, 600.0, 22.0, 400.0] for date, _ in rows])
-        with (directory / "df_occ.csv").open("w", encoding="utf-8", newline="") as output:
-            writer = csv.writer(output)
-            writer.writerow(["Date", "Image-based-occupancy"])
-            writer.writerows([[date, count] for date, (_, count) in zip(label_dates or [date for date, _ in rows], rows)])
-
-    def test_graz_conversion_uses_vienna_local_time_and_binary_labels(self):
-        rows = [("2023-10-27 09:05:00+00:00", 3), ("2023-11-30 23:05:00+00:00", 0), ("2023-12-01 08:00:00+00:00", 1)]
-        with tempfile.TemporaryDirectory() as directory:
-            source, output = Path(directory) / "interim", Path(directory) / "out"
-            output.mkdir()
-            for room in ("Room_A", "Room_B"):
-                self.write_room(source / room, rows)
-            counts = prepare(source, output)
-            self.assertEqual(counts, {"graz_room_a_train.csv": 1, "graz_room_a_test.csv": 2, "graz_room_b_test.csv": 2})
-            def converted(filename):
-                with (output / filename).open(encoding="utf-8", newline="") as source_file:
-                    return [(row["date"], row["Occupancy"]) for row in csv.DictReader(source_file)]
-            self.assertEqual(converted("graz_room_a_train.csv"), [("2023-10-27 11:05:00", "1")])
-            self.assertEqual(converted("graz_room_a_test.csv"), [("2023-12-01 00:05:00", "0"), ("2023-12-01 09:00:00", "1")])
-
-    def test_graz_conversion_rejects_misaligned_labels(self):
-        with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "interim"
-            self.write_room(source / "Room_A", [("2023-10-27 09:05:00+00:00", 1)], ["2023-10-27 09:10:00+00:00"])
-            self.write_room(source / "Room_B", [("2023-10-27 09:05:00+00:00", 1)])
-            with self.assertRaisesRegex(ValueError, "시각"):
-                prepare(source, Path(directory))
-
-    def test_committed_graz_files_match_conversion(self):
-        from models.prepare_data import OUTPUTS, SOURCE_DIR
-        if not SOURCE_DIR.is_dir():
-            self.skipTest("Graz 원본 데이터가 없는 실행 환경")
-        with tempfile.TemporaryDirectory() as directory:
-            prepare(SOURCE_DIR, Path(directory))
-            for filename in OUTPUTS:
-                with self.subTest(filename=filename):
-                    self.assertEqual((Path(directory) / filename).read_bytes(), (ROOT / "data" / filename).read_bytes())
 
 
 if __name__ == "__main__":

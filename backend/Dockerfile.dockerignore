@@ -13,9 +13,10 @@
 !data/
 !data/training_dataset.csv
 !data/test_dataset.csv
-!data/graz_room_a_train.csv
-!data/graz_room_a_test.csv
-!data/graz_room_b_test.csv
+!data/dataset_sources.json
+!scripts/
+!scripts/merge_data.py
+!scripts/runtime_logging.py
 models/weights/.training.lock
 models/weights/.registration.lock
 models/weights/.current.pending.json

@@ -22,6 +22,7 @@ ENCODING = "cyclic-time-v1"
 THRESHOLD, MIN_ACCURACY, SEED = 0.5, 0.85, 42
 MOCK_SENSORS = {"Temperature": 22.5, "Humidity": 45.0, "Light": 450.0, "CO2": 900.0,
                 "Hour": 14, "DayOfWeek": 2}
+_FINGERPRINT_CACHE: dict[str, tuple[tuple, str]] = {}
 
 
 class SensorInput(BaseModel):
@@ -106,6 +107,7 @@ def load_model(path: Path | None = None) -> LoadedModel:
         raise FileNotFoundError("모델 파일이 없습니다. 먼저 Docker Compose의 trainer를 실행하세요.")
     torch.set_num_threads(1)
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+
     features = tuple(checkpoint.get("features", ()))
     encoding = checkpoint.get("encoding", "sensor-only-v1")
     if (not isinstance(checkpoint.get("version"), str) or checkpoint.get("framework") != "pytorch"
@@ -113,20 +115,23 @@ def load_model(path: Path | None = None) -> LoadedModel:
             or not features or len(features) != len(set(features)) or not set(features) <= set(FEATURES)):
         raise ValueError("체크포인트의 버전·프레임워크·입력 규격이 지원하는 모델과 다릅니다.")
     valid_version(checkpoint["version"])
-    size = len(encoded_features(features, encoding))
+
+    input_size = len(encoded_features(features, encoding))
     mean, scale = checkpoint["mean"], checkpoint["scale"]
-    if (mean.shape != (size,) or scale.shape != mean.shape
+    if (mean.shape != (input_size,) or scale.shape != mean.shape
             or not torch.isfinite(mean).all() or not torch.isfinite(scale).all() or not (scale > 0).all()):
         raise ValueError("체크포인트의 표준화 값이 잘못되었습니다.")
     threshold = checkpoint["threshold"]
     if not isinstance(threshold, (int, float)) or not 0 < threshold < 1:
         raise ValueError("체크포인트의 분류 임계값이 잘못되었습니다.")
+
+    # 초기 체크포인트에는 구조 설정이 없어 당시의 16→8 ReLU 구조를 사용한다.
     network_config = checkpoint.get("network_config", {"hidden_layers": [16, 8], "activation": "relu", "dropout": 0})
     if (not 1 <= len(network_config["hidden_layers"]) <= 3
             or any(type(width) is not int or not 4 <= width <= 128 for width in network_config["hidden_layers"])
             or network_config["activation"] not in ("relu", "tanh") or not 0 <= network_config["dropout"] <= 0.5):
         raise ValueError("체크포인트의 신경망 설정이 잘못되었습니다.")
-    network = OccupancyNetwork(size, **network_config)
+    network = OccupancyNetwork(input_size, **network_config)
     network.load_state_dict(checkpoint["state_dict"], strict=True)
     if any(not torch.isfinite(parameter).all() for parameter in network.parameters()):
         raise ValueError("체크포인트의 가중치가 유한한 값이 아닙니다.")
@@ -137,10 +142,13 @@ def load_model(path: Path | None = None) -> LoadedModel:
 
 def predict_one(model: LoadedModel, sensors: dict) -> dict:
     validated = SensorInput(**sensors)
-    values = torch.tensor([input_vector(validated, model.metadata["features"],
-                                        model.metadata.get("encoding", "sensor-only-v1"))], dtype=torch.float32)
+    features = model.metadata["features"]
+    encoding = model.metadata.get("encoding", "sensor-only-v1")
+    values = torch.tensor([input_vector(validated, features, encoding)], dtype=torch.float32)
     with torch.inference_mode():
-        probability = float(torch.sigmoid(model.network((values - model.mean) / model.scale)).item())
+        normalized_values = (values - model.mean) / model.scale
+        logits = model.network(normalized_values)
+        probability = float(torch.sigmoid(logits).item())
     occupancy = int(probability >= model.metadata["threshold"])
     return {"model_version": model.metadata["version"], "occupancy": occupancy,
             "label": "사용 중" if occupancy else "비어 있음", "probability": probability}
@@ -168,34 +176,68 @@ def model_versions(active_version: str | None = None) -> dict:
     pairs = []
     paths = list(REPORTS_DIR.glob("*/light_comparison.json"))
     paths.sort(key=lambda path: int(valid_version(path.parent.name)[1:]), reverse=True)
+    listed_versions = {path.parent.name for path in paths}
+    for version in _FINGERPRINT_CACHE.keys() - listed_versions:
+        del _FINGERPRINT_CACHE[version]
     for path in paths:
         report = json.loads(path.read_text(encoding="utf-8"))
         version = valid_version(report["model_version"])
         models = []
         for mode, variant in report["modes"].items():
-            models.append({"mode": mode, "features": variant["features"],
-                           "architecture": variant["architecture"], "metrics": variant["model_metrics"],
-                           "quality_gate": variant["quality_gate"],
-                           "training": {key: value for key, value in variant.get("training", {}).items() if key != "history"},
-                           "validation_metrics": variant.get("validation_metrics"),
-                           "future_subset_metrics": variant.get("future_subset_metrics"),
-                           "checkpoint_exists": weight_path(version, mode).is_file()})
+            # 목록에서는 설정·평가만 보내고 에포크별 곡선은 상세 보고서에서 제공한다.
+            training_settings = {key: value for key, value in variant.get("training", {}).items() if key != "history"}
+            models.append({
+                "mode": mode,
+                "features": variant["features"],
+                "architecture": variant["architecture"],
+                "metrics": variant["model_metrics"],
+                "quality_gate": variant["quality_gate"],
+                "training": training_settings,
+                "validation_metrics": variant.get("validation_metrics"),
+                "future_subset_metrics": variant.get("future_subset_metrics"),
+                "test_data": variant.get("test_data"),
+                "source_metrics": variant.get("source_metrics"),
+                "checkpoint_exists": weight_path(version, mode).is_file(),
+            })
         ready = all(item["checkpoint_exists"] for item in models)
         signature = report.get("pair_fingerprint")
         if ready:
-            signature = pair_fingerprint({mode: torch.load(weight_path(version, mode), map_location="cpu", weights_only=True)
-                                          for mode in report["modes"]})
+            checkpoint_paths = {mode: weight_path(version, mode) for mode in report["modes"]}
+            file_state = []
+            for mode, checkpoint_path in sorted(checkpoint_paths.items()):
+                stat = checkpoint_path.stat()
+                file_state.append((mode, str(checkpoint_path.resolve()), stat.st_mtime_ns, stat.st_size))
+            file_state = tuple(file_state)
+            cached = _FINGERPRINT_CACHE.get(version)
+            # 파일 교체·모드 변경 시 재계산하고, 같은 버전의 이전 상태는 덮어쓴다.
+            if cached is None or cached[0] != file_state:
+                checkpoints = {
+                    mode: torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+                    for mode, checkpoint_path in checkpoint_paths.items()
+                }
+                signature = pair_fingerprint(checkpoints)
+                _FINGERPRINT_CACHE[version] = (file_state, signature)
+            else:
+                signature = cached[1]
+        else:
+            _FINGERPRINT_CACHE.pop(version, None)
         training_path = REPORTS_DIR / version / "training.json"
         training_report = json.loads(training_path.read_text(encoding="utf-8")) if training_path.is_file() else None
-        pairs.append({"version": version, "current": version == active_version,
-                      "created_at_utc": report["modes"]["with_light"]["created_at_utc"],
-                      "test_rows": report["test_rows"], "models": models,
-                      "ready": ready, "fingerprint": signature,
-                      "name": training_report["config"]["name"] if training_report else f"기존 {version} 모델",
-                      "config": training_report["config"] if training_report else None,
-                      "duration_seconds": training_report.get("duration_seconds") if training_report else None,
-                      "job_id": training_report.get("job_id") if training_report else None,
-                      "accuracy_difference_percentage_points": report.get("accuracy_difference_percentage_points")})
+        pairs.append({
+            "version": version,
+            "current": version == active_version,
+            "created_at_utc": report["modes"]["with_light"]["created_at_utc"],
+            "test_rows": report["test_rows"],
+            "test_data": report["modes"]["with_light"].get("test_data"),
+            "models": models,
+            "ready": ready,
+            "fingerprint": signature,
+            "name": training_report["config"]["name"] if training_report else f"기존 {version} 모델",
+            "config": training_report["config"] if training_report else None,
+            "duration_seconds": training_report.get("duration_seconds") if training_report else None,
+            "job_id": training_report.get("job_id") if training_report else None,
+            "accuracy_difference_percentage_points": report.get("accuracy_difference_percentage_points"),
+        })
     identities = {}
     for pair in reversed(pairs):
         signature = pair["fingerprint"]

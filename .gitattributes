@@ -1,0 +1,4 @@
+# 모델·출처 연결에 쓰는 SHA-256이 checkout 시 줄바꿈 변환으로 달라지지 않게 한다.
+/data/training_dataset.csv -text whitespace=cr-at-eol
+/data/test_dataset.csv -text whitespace=cr-at-eol
+/data/dataset_sources.json -text whitespace=cr-at-eol
