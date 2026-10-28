@@ -34,6 +34,17 @@ MAX_EPOCHS = 200
 PATIENCE = 30
 LEARNING_RATE = 0.01
 JOBS_DIR = REPORTS_DIR / "jobs"
+TRAINING_SOURCES = {
+    "uci": {"label": "UCI 사무실 · 2015년 2월", "file": "data/training_dataset.csv", "site": "uci"},
+    "graz_room_a": {"label": "Graz 사무실 A · 2023년 9~11월", "file": "data/graz_room_a_train.csv", "site": "graz"},
+}
+TEST_SETS = {
+    "uci": {"label": "UCI 사무실 평가", "file": "data/test_dataset.csv", "site": "uci"},
+    "graz_room_a": {"label": "Graz A 12월 · 미래 기간", "file": "data/graz_room_a_test.csv", "site": "graz"},
+    "graz_room_b": {"label": "Graz B 12월 · 학습하지 않은 공간", "file": "data/graz_room_b_test.csv", "site": "graz"},
+}
+PRIMARY_TEST = "uci"
+WORKING_HOURS = (7, 19)
 
 
 class TrainingConfig(BaseModel):
@@ -58,6 +69,9 @@ class TrainingConfig(BaseModel):
     balance_classes: bool = False
     compare_light: bool = True
     make_default: bool = False
+    datasets: list[Literal["uci", "graz_room_a"]] = Field(
+        default_factory=lambda: list(TRAINING_SOURCES), min_length=1, max_length=2,
+        description="학습에 사용할 데이터. 각 데이터의 시간순 뒤쪽을 검증에 사용")
 
     @field_validator("name")
     @classmethod
@@ -72,6 +86,13 @@ class TrainingConfig(BaseModel):
         if len(value) != len(set(value)):
             raise ValueError("같은 피처를 두 번 선택할 수 없습니다.")
         return [name for name in FEATURES if name in value]
+
+    @field_validator("datasets")
+    @classmethod
+    def canonical_datasets(cls, value):
+        if len(value) != len(set(value)):
+            raise ValueError("같은 학습 데이터를 두 번 선택할 수 없습니다.")
+        return [name for name in TRAINING_SOURCES if name in value]
 
     @field_validator("hidden_layers")
     @classmethod
@@ -146,6 +167,46 @@ def split_training(source: Dataset, validation_ratio: float = 0.2) -> tuple[Data
     return datasets[0], datasets[1]
 
 
+def load_training_sources(keys=None) -> dict[str, Dataset]:
+    return {key: load_dataset(ROOT / TRAINING_SOURCES[key]["file"]) for key in (keys or TRAINING_SOURCES)}
+
+
+def load_test_sets() -> dict[str, Dataset]:
+    return {key: load_dataset(ROOT / spec["file"]) for key, spec in TEST_SETS.items()}
+
+
+def concat_datasets(parts: list[Dataset]) -> Dataset:
+    y = np.concatenate([part.y for part in parts])
+    dates = [date for part in parts for date in part.dates]
+    return Dataset(np.concatenate([part.x for part in parts]), y, dates, summarize(y, dates))
+
+
+def combined_summary(datasets: dict[str, Dataset]) -> dict:
+    return {**concat_datasets(list(datasets.values())).summary,
+            "sources": {key: data.summary for key, data in datasets.items()}}
+
+
+def working_hours(dates: list[datetime]) -> np.ndarray:
+    start, end = WORKING_HOURS
+    return np.array([date.weekday() < 5 and start <= date.hour < end for date in dates])
+
+
+def audit_sources(sources: dict[str, Dataset], tests: dict[str, Dataset]) -> dict:
+    """모든 학습 데이터와 평가 세트의 시점·기록 중복을 막고, 같은 장소의 학습 기간 기준 이전·이후 행을 센다."""
+    training = concat_datasets(list(sources.values()))
+    result = {}
+    for key, test in tests.items():
+        audit = audit_split(training, test)
+        same_site = [data for name, data in sources.items() if TRAINING_SOURCES[name]["site"] == TEST_SETS[key]["site"]]
+        if same_site:
+            audit.update({name: value for name, value in audit_split(concat_datasets(same_site), test).items()
+                          if name.startswith("test_rows")})
+        else:
+            audit.update(test_rows_before_training=None, test_rows_after_training=None)
+        result[key] = audit
+    return result
+
+
 def audit_split(training: Dataset, test: Dataset) -> dict:
     shared_timestamps = len(set(training.dates) & set(test.dates))
     training_records = {(date, *row, label) for date, row, label in zip(training.dates, training.x, training.y)}
@@ -169,6 +230,26 @@ def evaluate(labels: np.ndarray, values: np.ndarray, threshold: float = THRESHOL
             "probability_mae": float(mean_absolute_error(labels, values)),
             "brier_score": float(brier_score_loss(labels, values)),
             "confusion_matrix": confusion_matrix(labels, predicted, labels=[0, 1]).tolist()}
+
+
+def evaluate_test_sets(network: OccupancyNetwork, scaler: dict, tests: dict[str, Dataset],
+                       columns: list[int], threshold: float) -> dict:
+    """평가 세트마다 전체 지표와 평일 업무시간 지표를 다수 클래스 기준선과 함께 계산한다."""
+    results = {}
+    for key, test in tests.items():
+        values = probabilities(network, test.x[:, columns], scaler)
+        work = working_hours(test.dates)
+        rate = float(test.y[work].mean()) if work.any() else float("nan")
+        results[key] = {
+            "label": TEST_SETS[key]["label"], "rows": len(test.y),
+            "metrics": evaluate(test.y, values, threshold) if len(set(test.y)) == 2 else None,
+            "working_hours": {
+                "definition": f"평일 {WORKING_HOURS[0]}~{WORKING_HOURS[1]}시", "rows": int(work.sum()),
+                "majority_baseline_accuracy": max(rate, 1 - rate) if work.any() else None,
+                "metrics": evaluate(test.y[work], values[work], threshold) if len(set(test.y[work])) == 2 else None,
+            },
+        }
+    return results
 
 
 def require_accuracy(metrics: dict) -> None:
@@ -263,17 +344,21 @@ def probabilities(network: OccupancyNetwork, x: np.ndarray, scaler: dict) -> np.
         return torch.sigmoid(network(values)).numpy()
 
 
-def train_variant(mode: str, source: Dataset, test: Dataset, audit: dict,
+def train_variant(mode: str, sources: dict[str, Dataset], tests: dict[str, Dataset], audit: dict,
                   config: TrainingConfig | None = None, features=None, progress=None) -> tuple[dict, dict]:
     config = config or TrainingConfig()
     features = tuple(features or FEATURE_SETS[mode])
     columns = [encoded_features(FEATURES).index(name) for name in encoded_features(features)]
-    source = Dataset(source.x[:, columns], source.y, source.dates, source.summary)
-    test = Dataset(test.x[:, columns], test.y, test.dates, test.summary)
-    training, validation = split_training(source, config.validation_ratio)
+    splits =[split_training(Dataset(data.x[:, columns], data.y, data.dates, data.summary), config.validation_ratio)
+              for data in sources.values()]
+    training = concat_datasets([part for part, _ in splits])
+    validation = concat_datasets([part for _, part in splits])
     network, scaler, training_info = train_network(training, validation, config, progress)
+    test_sets = evaluate_test_sets(network, scaler, tests, columns, config.threshold)
+    primary = tests[PRIMARY_TEST]
+    test = Dataset(primary.x[:, columns], primary.y, primary.dates, primary.summary)
     test_probabilities = probabilities(network, test.x, scaler)
-    metrics = evaluate(test.y, test_probabilities, config.threshold)
+    metrics = test_sets[PRIMARY_TEST]["metrics"]
     rate = float(training.y.mean())
     metadata = {
         "format_version": 1, "framework": "pytorch", "feature_mode": mode,
@@ -284,7 +369,8 @@ def train_variant(mode: str, source: Dataset, test: Dataset, audit: dict,
         "features": list(features), "threshold": config.threshold, "random_state": config.seed,
         "python_version": platform.python_version(),
         "packages": {name: version(name) for name in ("torch", "numpy", "scikit-learn")},
-        "training_data": source.summary,
+        "training_data": combined_summary(sources),
+        "training_datasets": {key: TRAINING_SOURCES[key]["label"] for key in sources},
         "training_split": training.summary, "validation_split": validation.summary, "training": training_info,
     }
     report = {
@@ -292,16 +378,19 @@ def train_variant(mode: str, source: Dataset, test: Dataset, audit: dict,
         "quality_gate": {"minimum_accuracy": MIN_ACCURACY, "passed": metrics["accuracy"] >= MIN_ACCURACY},
         "validation_metrics": evaluate(validation.y, probabilities(network, validation.x, scaler), config.threshold),
         "model_metrics": metrics,
+        "test_sets": test_sets,
         "baseline": {"description": "학습 구간의 사용 비율을 모든 평가 행에 동일하게 반환",
                      "training_occupancy_rate": rate, "metrics": evaluate(test.y, np.full(len(test.y), rate), config.threshold)},
-        "evaluation_notes": ["학습 파일을 설정한 비율로 시간순 분할하고 각 모델의 검증 손실로 가중치를 선택합니다.",
+        "evaluation_notes": ["학습 데이터마다 설정한 비율로 시간순 분할하고 각 모델의 검증 손실로 가중치를 선택합니다.",
                              "평가 정답으로 가중치·임계값을 조정하지 않습니다.",
-                             "평가 파일에는 학습 기간 이전·이후 시점이 함께 있습니다.",
-                             "Hour와 DayOfWeek는 CSV date에서 추출하며 학습·예측이 같은 주기 변환을 사용합니다."],
+                             "model_metrics는 이전 버전과 비교하도록 UCI 평가 파일 기준입니다. UCI 평가 파일에는 학습 기간 이전·이후 시점이 함께 있습니다.",
+                             "test_sets는 장소·기간별 평가이며 야간·주말을 뺀 평일 업무시간 지표를 다수 클래스 기준선과 함께 제공합니다.",
+                             "Hour와 DayOfWeek는 현지 시각 date에서 추출하며 학습·예측이 같은 주기 변환을 사용합니다."],
     }
-    future_mask = np.array([date > max(source.dates) for date in test.dates])
-    if len(set(test.y[future_mask])) == 2:
-        report["future_subset_metrics"] = evaluate(test.y[future_mask], test_probabilities[future_mask], config.threshold)
+    if "uci" in sources:
+        future_mask = np.array([date > max(sources["uci"].dates) for date in test.dates])
+        if len(set(test.y[future_mask])) == 2:
+            report["future_subset_metrics"] = evaluate(test.y[future_mask], test_probabilities[future_mask], config.threshold)
     print(f"{mode}: 정확도 {metrics['accuracy']:.2%}, F1 {metrics['f1']:.4f}")
     return report, {**metadata, "state_dict": network.state_dict(), **scaler}
 
@@ -360,7 +449,7 @@ def save_model_pair(checkpoints: dict, reports: dict, weights_dir: Path = WEIGHT
                          f"학습 작업: {training_report.get('job_id') or '직접 실행'}", "",
                          "## 학습 설정", "", "```json",
                          json.dumps(training_report["config"], ensure_ascii=False, indent=2), "```", "",
-                         "## 평가", "", "| 모델 | 피처 | 정확도 | 정밀도 | 재현율 | F1 | 최적 에포크 |",
+                         "## 평가 (UCI 평가 파일)", "", "| 모델 | 피처 | 정확도 | 정밀도 | 재현율 | F1 | 최적 에포크 |",
                          "|---|---|---:|---:|---:|---:|---:|"]
                 for mode, report in reports.items():
                     metrics = report["model_metrics"]
@@ -368,6 +457,16 @@ def save_model_pair(checkpoints: dict, reports: dict, weights_dir: Path = WEIGHT
                                  f"{', '.join(report['features'])} | {metrics['accuracy']:.2%} | "
                                  f"{metrics['precision']:.2%} | {metrics['recall']:.2%} | {metrics['f1']:.4f} | "
                                  f"{report['training']['best_epoch']} |")
+                if any("test_sets" in report for report in reports.values()):
+                    lines.extend(["", "## 장소·기간별 평가 (평일 업무시간)", "",
+                                  "| 모델 | 평가 데이터 | 전체 정확도 | 업무시간 정확도 | 다수 클래스 기준선 | 업무시간 F1 |",
+                                  "|---|---|---:|---:|---:|---:|"])
+                    for mode, report in reports.items():
+                        for result in report.get("test_sets", {}).values():
+                            work = result["working_hours"]
+                            lines.append(f"| {'선택 모델' if mode == 'with_light' else '조도 제외 비교 모델'} | {result['label']} | "
+                                         f"{result['metrics']['accuracy']:.2%} | {work['metrics']['accuracy']:.2%} | "
+                                         f"{work['majority_baseline_accuracy']:.2%} | {work['metrics']['f1']:.4f} |")
                 lines.extend(["", "검증 손실이 가장 낮은 가중치를 선택했습니다. 손실 곡선과 데이터 해시는 training.json에 보존합니다.",
                               "전체 평가 파일은 학습 기간 이전·이후 기록을 포함하므로 순수한 미래 예측 성능이 아닙니다.",
                               "피처 제거·설정 변경으로 85% 미만이 되어도 실험 모델을 보존합니다."])
@@ -393,16 +492,16 @@ def train_experiment(config: TrainingConfig, *, weights_dir=WEIGHTS_DIR, reports
                      job_id=None, progress=None, force_new=True) -> str:
     weights_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
-    source = load_dataset(ROOT / "data/training_dataset.csv")
-    test = load_dataset(ROOT / "data/test_dataset.csv")
-    audit = audit_split(source, test)
+    sources = load_training_sources(config.datasets)
+    tests = load_test_sets()
+    audit = audit_sources(sources, tests)
     variants = {"with_light": config.features}
     if config.compare_light and "Light" in config.features and len(config.features) > 1:
         variants["without_light"] = [name for name in config.features if name != "Light"]
     reports, checkpoints = {}, {}
     for index, (mode, features) in enumerate(variants.items()):
         callback = (lambda point, mode=mode, index=index: progress(mode, index, len(variants), point)) if progress else None
-        reports[mode], checkpoints[mode] = train_variant(mode, source, test, audit, config, features, callback)
+        reports[mode], checkpoints[mode] = train_variant(mode, sources, tests, audit, config, features, callback)
     if progress:
         progress("saving", len(variants), len(variants), None)
     # 버전 번호 배정과 기본 모델 변경도 동시에 실행되지 않도록 보호한다.
@@ -412,7 +511,9 @@ def train_experiment(config: TrainingConfig, *, weights_dir=WEIGHTS_DIR, reports
                                training_report={"job_id": job_id, "config": config.model_dump(),
                                                 "duration_seconds": round(time.monotonic() - started, 3),
                                                 "created_at_utc": datetime.now(timezone.utc).isoformat(),
-                                                "split_strategy": "chronological", "data_audit": audit})
+                                                "split_strategy": "chronological per dataset",
+                                                "datasets": {key: TRAINING_SOURCES[key] for key in sources},
+                                                "test_sets": TEST_SETS, "data_audit": audit})
 
 
 def run_training_job(job_id: str, jobs_dir=JOBS_DIR, weights_dir=WEIGHTS_DIR, reports_dir=REPORTS_DIR):
@@ -478,12 +579,12 @@ def main() -> None:
     WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
     try:
         with FileLock(WEIGHTS_DIR / ".training.lock", timeout=0):
-            source = load_dataset(ROOT / "data" / "training_dataset.csv")
-            test = load_dataset(ROOT / "data" / "test_dataset.csv")
-            audit = audit_split(source, test)
+            sources = load_training_sources()
+            tests = load_test_sets()
+            audit = audit_sources(sources, tests)
             reports, checkpoints = {}, {}
             for mode in FEATURE_SETS:
-                reports[mode], checkpoints[mode] = train_variant(mode, source, test, audit)
+                reports[mode], checkpoints[mode] = train_variant(mode, sources, tests, audit)
             require_accuracy(reports["with_light"]["model_metrics"])
             save_model_pair(checkpoints, reports)
     except Timeout as error:

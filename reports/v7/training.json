@@ -1,0 +1,1626 @@
+{
+  "job_id": "9fbb82768f124dbe92b2b7240eef96d2",
+  "config": {
+    "name": "Graz 보강 · 요일 제외 · tanh",
+    "features": [
+      "Temperature",
+      "Humidity",
+      "Light",
+      "CO2",
+      "Hour"
+    ],
+    "epochs": 200,
+    "learning_rate": 0.01,
+    "batch_size": 0,
+    "hidden_layers": [
+      16,
+      8
+    ],
+    "activation": "tanh",
+    "optimizer": "adam",
+    "dropout": 0.0,
+    "weight_decay": 0.0,
+    "validation_ratio": 0.2,
+    "patience": 30,
+    "threshold": 0.5,
+    "seed": 42,
+    "normalize": true,
+    "balance_classes": false,
+    "compare_light": true,
+    "make_default": false,
+    "datasets": [
+      "uci",
+      "graz_room_a"
+    ]
+  },
+  "duration_seconds": 20.434,
+  "created_at_utc": "2026-10-14T08:35:10.468355+00:00",
+  "split_strategy": "chronological per dataset",
+  "datasets": {
+    "uci": {
+      "label": "UCI 사무실 · 2015년 2월",
+      "file": "data/training_dataset.csv",
+      "site": "uci"
+    },
+    "graz_room_a": {
+      "label": "Graz 사무실 A · 2023년 9~11월",
+      "file": "data/graz_room_a_train.csv",
+      "site": "graz"
+    }
+  },
+  "test_sets": {
+    "uci": {
+      "label": "UCI 사무실 평가",
+      "file": "data/test_dataset.csv",
+      "site": "uci"
+    },
+    "graz_room_a": {
+      "label": "Graz A 12월 · 미래 기간",
+      "file": "data/graz_room_a_test.csv",
+      "site": "graz"
+    },
+    "graz_room_b": {
+      "label": "Graz B 12월 · 학습하지 않은 공간",
+      "file": "data/graz_room_b_test.csv",
+      "site": "graz"
+    }
+  },
+  "data_audit": {
+    "uci": {
+      "shared_timestamps": 0,
+      "shared_records": 0,
+      "test_rows_before_training": 2665,
+      "test_rows_after_training": 9752
+    },
+    "graz_room_a": {
+      "shared_timestamps": 0,
+      "shared_records": 0,
+      "test_rows_before_training": 0,
+      "test_rows_after_training": 4464
+    },
+    "graz_room_b": {
+      "shared_timestamps": 0,
+      "shared_records": 0,
+      "test_rows_before_training": 0,
+      "test_rows_after_training": 4450
+    }
+  },
+  "model_version": "v7",
+  "pair_fingerprint": "0ded08daed4d294df913bc803208912209dd8a28815076270a6662702a961e79",
+  "models": {
+    "with_light": {
+      "format_version": 1,
+      "framework": "pytorch",
+      "feature_mode": "with_light",
+      "encoding": "cyclic-time-v1",
+      "encoded_features": [
+        "Temperature",
+        "Humidity",
+        "Light",
+        "CO2",
+        "HourSin",
+        "HourCos"
+      ],
+      "architecture": "MLP 6 → 16 → 8 → 1, tanh",
+      "network_config": {
+        "hidden_layers": [
+          16,
+          8
+        ],
+        "activation": "tanh",
+        "dropout": 0.0
+      },
+      "created_at_utc": "2026-10-14T08:35:07.899140+00:00",
+      "features": [
+        "Temperature",
+        "Humidity",
+        "Light",
+        "CO2",
+        "Hour"
+      ],
+      "threshold": 0.5,
+      "random_state": 42,
+      "python_version": "3.12.15",
+      "packages": {
+        "torch": "2.14.1+cpu",
+        "numpy": "2.5.3",
+        "scikit-learn": "1.9.1"
+      },
+      "training_data": {
+        "rows": 27534,
+        "class_counts": {
+          "1": 6628,
+          "0": 20906
+        },
+        "first_timestamp": "2015-02-04 17:51:00",
+        "last_timestamp": "2023-11-30 23:55:00",
+        "duplicate_timestamps": 0,
+        "sources": {
+          "uci": {
+            "rows": 8143,
+            "class_counts": {
+              "1": 1729,
+              "0": 6414
+            },
+            "first_timestamp": "2015-02-04 17:51:00",
+            "last_timestamp": "2015-02-10 09:33:00",
+            "duplicate_timestamps": 0,
+            "file": "data/training_dataset.csv",
+            "sha256": "682acb5af40f7d2a549d3fc579d24cbb830e2291eecc933072198c4edda54e4a"
+          },
+          "graz_room_a": {
+            "rows": 19391,
+            "class_counts": {
+              "1": 4899,
+              "0": 14492
+            },
+            "first_timestamp": "2023-09-12 11:05:00",
+            "last_timestamp": "2023-11-30 23:55:00",
+            "duplicate_timestamps": 0,
+            "file": "data/graz_room_a_train.csv",
+            "sha256": "2a94aafbc979fbf8faf700ba66fda6d841393657b2b9f00cdfa8e55b283fb92a"
+          }
+        }
+      },
+      "training_datasets": {
+        "uci": "UCI 사무실 · 2015년 2월",
+        "graz_room_a": "Graz 사무실 A · 2023년 9~11월"
+      },
+      "training_split": {
+        "rows": 22026,
+        "class_counts": {
+          "1": 5229,
+          "0": 16797
+        },
+        "first_timestamp": "2015-02-04 17:51:00",
+        "last_timestamp": "2023-11-06 11:10:00",
+        "duplicate_timestamps": 0
+      },
+      "validation_split": {
+        "rows": 5508,
+        "class_counts": {
+          "0": 4109,
+          "1": 1399
+        },
+        "first_timestamp": "2015-02-09 06:24:59",
+        "last_timestamp": "2023-11-30 23:55:00",
+        "duplicate_timestamps": 0
+      },
+      "training": {
+        "name": "Graz 보강 · 요일 제외 · tanh",
+        "features": [
+          "Temperature",
+          "Humidity",
+          "Light",
+          "CO2",
+          "Hour"
+        ],
+        "epochs": 200,
+        "learning_rate": 0.01,
+        "batch_size": 0,
+        "hidden_layers": [
+          16,
+          8
+        ],
+        "activation": "tanh",
+        "optimizer": "adam",
+        "dropout": 0.0,
+        "weight_decay": 0.0,
+        "validation_ratio": 0.2,
+        "patience": 30,
+        "threshold": 0.5,
+        "seed": 42,
+        "normalize": true,
+        "balance_classes": false,
+        "compare_light": true,
+        "make_default": false,
+        "datasets": [
+          "uci",
+          "graz_room_a"
+        ],
+        "max_epochs": 200,
+        "epochs_run": 59,
+        "best_epoch": 29,
+        "effective_batch_size": 22026,
+        "history": [
+          {
+            "epoch": 1,
+            "training_loss": 0.785049319267273,
+            "validation_loss": 0.761875331401825,
+            "validation_accuracy": 0.33006536960601807
+          },
+          {
+            "epoch": 2,
+            "training_loss": 0.7467270493507385,
+            "validation_loss": 0.7227845788002014,
+            "validation_accuracy": 0.3623819947242737
+          },
+          {
+            "epoch": 3,
+            "training_loss": 0.7127079367637634,
+            "validation_loss": 0.6866661906242371,
+            "validation_accuracy": 0.4377269446849823
+          },
+          {
+            "epoch": 4,
+            "training_loss": 0.6810629367828369,
+            "validation_loss": 0.6521145701408386,
+            "validation_accuracy": 0.6468772888183594
+          },
+          {
+            "epoch": 5,
+            "training_loss": 0.6507180333137512,
+            "validation_loss": 0.6185429096221924,
+            "validation_accuracy": 0.8001089096069336
+          },
+          {
+            "epoch": 6,
+            "training_loss": 0.6211687922477722,
+            "validation_loss": 0.5858234167098999,
+            "validation_accuracy": 0.8714597225189209
+          },
+          {
+            "epoch": 7,
+            "training_loss": 0.5920707583427429,
+            "validation_loss": 0.5540337562561035,
+            "validation_accuracy": 0.9025054574012756
+          },
+          {
+            "epoch": 8,
+            "training_loss": 0.5632073283195496,
+            "validation_loss": 0.523190438747406,
+            "validation_accuracy": 0.9208424091339111
+          },
+          {
+            "epoch": 9,
+            "training_loss": 0.5344513058662415,
+            "validation_loss": 0.4932790994644165,
+            "validation_accuracy": 0.9297385811805725
+          },
+          {
+            "epoch": 10,
+            "training_loss": 0.5057814121246338,
+            "validation_loss": 0.46429944038391113,
+            "validation_accuracy": 0.933914303779602
+          },
+          {
+            "epoch": 11,
+            "training_loss": 0.4773101508617401,
+            "validation_loss": 0.4362930953502655,
+            "validation_accuracy": 0.9370007514953613
+          },
+          {
+            "epoch": 12,
+            "training_loss": 0.44927075505256653,
+            "validation_loss": 0.40937086939811707,
+            "validation_accuracy": 0.9393609166145325
+          },
+          {
+            "epoch": 13,
+            "training_loss": 0.4219772517681122,
+            "validation_loss": 0.38370567560195923,
+            "validation_accuracy": 0.9400871396064758
+          },
+          {
+            "epoch": 14,
+            "training_loss": 0.3957769274711609,
+            "validation_loss": 0.3595045208930969,
+            "validation_accuracy": 0.9402686953544617
+          },
+          {
+            "epoch": 15,
+            "training_loss": 0.371005117893219,
+            "validation_loss": 0.33697471022605896,
+            "validation_accuracy": 0.9389978051185608
+          },
+          {
+            "epoch": 16,
+            "training_loss": 0.34794580936431885,
+            "validation_loss": 0.31629469990730286,
+            "validation_accuracy": 0.9377269148826599
+          },
+          {
+            "epoch": 17,
+            "training_loss": 0.3268021047115326,
+            "validation_loss": 0.29759618639945984,
+            "validation_accuracy": 0.9364560842514038
+          },
+          {
+            "epoch": 18,
+            "training_loss": 0.3076801300048828,
+            "validation_loss": 0.28096023201942444,
+            "validation_accuracy": 0.9346405267715454
+          },
+          {
+            "epoch": 19,
+            "training_loss": 0.29058974981307983,
+            "validation_loss": 0.26642143726348877,
+            "validation_accuracy": 0.9331880807876587
+          },
+          {
+            "epoch": 20,
+            "training_loss": 0.2754618227481842,
+            "validation_loss": 0.2539682984352112,
+            "validation_accuracy": 0.9320987462997437
+          },
+          {
+            "epoch": 21,
+            "training_loss": 0.26217469573020935,
+            "validation_loss": 0.2435385137796402,
+            "validation_accuracy": 0.9311909675598145
+          },
+          {
+            "epoch": 22,
+            "training_loss": 0.2505793571472168,
+            "validation_loss": 0.2350207269191742,
+            "validation_accuracy": 0.9311909675598145
+          },
+          {
+            "epoch": 23,
+            "training_loss": 0.24051769077777863,
+            "validation_loss": 0.22826434671878815,
+            "validation_accuracy": 0.9306463599205017
+          },
+          {
+            "epoch": 24,
+            "training_loss": 0.2318357229232788,
+            "validation_loss": 0.22309231758117676,
+            "validation_accuracy": 0.9288308024406433
+          },
+          {
+            "epoch": 25,
+            "training_loss": 0.22439195215702057,
+            "validation_loss": 0.21931259334087372,
+            "validation_accuracy": 0.9275599122047424
+          },
+          {
+            "epoch": 26,
+            "training_loss": 0.21806012094020844,
+            "validation_loss": 0.21672697365283966,
+            "validation_accuracy": 0.9242919683456421
+          },
+          {
+            "epoch": 27,
+            "training_loss": 0.2127273827791214,
+            "validation_loss": 0.21513833105564117,
+            "validation_accuracy": 0.922113299369812
+          },
+          {
+            "epoch": 28,
+            "training_loss": 0.20828977227210999,
+            "validation_loss": 0.21435624361038208,
+            "validation_accuracy": 0.9212055206298828
+          },
+          {
+            "epoch": 29,
+            "training_loss": 0.20464742183685303,
+            "validation_loss": 0.21420183777809143,
+            "validation_accuracy": 0.9201161861419678
+          },
+          {
+            "epoch": 30,
+            "training_loss": 0.20170165598392487,
+            "validation_loss": 0.2145121842622757,
+            "validation_accuracy": 0.9195715188980103
+          },
+          {
+            "epoch": 31,
+            "training_loss": 0.19935575127601624,
+            "validation_loss": 0.21514323353767395,
+            "validation_accuracy": 0.9201161861419678
+          },
+          {
+            "epoch": 32,
+            "training_loss": 0.1975170522928238,
+            "validation_loss": 0.21597179770469666,
+            "validation_accuracy": 0.9199346303939819
+          },
+          {
+            "epoch": 33,
+            "training_loss": 0.19610001146793365,
+            "validation_loss": 0.21689610183238983,
+            "validation_accuracy": 0.918663740158081
+          },
+          {
+            "epoch": 34,
+            "training_loss": 0.1950273960828781,
+            "validation_loss": 0.2178352028131485,
+            "validation_accuracy": 0.918663740158081
+          },
+          {
+            "epoch": 35,
+            "training_loss": 0.19423046708106995,
+            "validation_loss": 0.2187281996011734,
+            "validation_accuracy": 0.9184821844100952
+          },
+          {
+            "epoch": 36,
+            "training_loss": 0.19364802539348602,
+            "validation_loss": 0.21953241527080536,
+            "validation_accuracy": 0.9188452959060669
+          },
+          {
+            "epoch": 37,
+            "training_loss": 0.19322524964809418,
+            "validation_loss": 0.2202218621969223,
+            "validation_accuracy": 0.9183006286621094
+          },
+          {
+            "epoch": 38,
+            "training_loss": 0.19291312992572784,
+            "validation_loss": 0.22078467905521393,
+            "validation_accuracy": 0.9179375171661377
+          },
+          {
+            "epoch": 39,
+            "training_loss": 0.19266821444034576,
+            "validation_loss": 0.22122029960155487,
+            "validation_accuracy": 0.9177560210227966
+          },
+          {
+            "epoch": 40,
+            "training_loss": 0.19245345890522003,
+            "validation_loss": 0.22153638303279877,
+            "validation_accuracy": 0.9179375171661377
+          },
+          {
+            "epoch": 41,
+            "training_loss": 0.19223876297473907,
+            "validation_loss": 0.2217458188533783,
+            "validation_accuracy": 0.9179375171661377
+          },
+          {
+            "epoch": 42,
+            "training_loss": 0.1920013129711151,
+            "validation_loss": 0.2218637615442276,
+            "validation_accuracy": 0.9183006286621094
+          },
+          {
+            "epoch": 43,
+            "training_loss": 0.1917254775762558,
+            "validation_loss": 0.22190551459789276,
+            "validation_accuracy": 0.9183006286621094
+          },
+          {
+            "epoch": 44,
+            "training_loss": 0.1914018988609314,
+            "validation_loss": 0.22188499569892883,
+            "validation_accuracy": 0.9190268516540527
+          },
+          {
+            "epoch": 45,
+            "training_loss": 0.19102607667446136,
+            "validation_loss": 0.22181348502635956,
+            "validation_accuracy": 0.9195715188980103
+          },
+          {
+            "epoch": 46,
+            "training_loss": 0.1905967891216278,
+            "validation_loss": 0.22169941663742065,
+            "validation_accuracy": 0.9195715188980103
+          },
+          {
+            "epoch": 47,
+            "training_loss": 0.19011454284191132,
+            "validation_loss": 0.22154808044433594,
+            "validation_accuracy": 0.9206608533859253
+          },
+          {
+            "epoch": 48,
+            "training_loss": 0.189580500125885,
+            "validation_loss": 0.2213621884584427,
+            "validation_accuracy": 0.921023964881897
+          },
+          {
+            "epoch": 49,
+            "training_loss": 0.18899565935134888,
+            "validation_loss": 0.22114238142967224,
+            "validation_accuracy": 0.921023964881897
+          },
+          {
+            "epoch": 50,
+            "training_loss": 0.18836066126823425,
+            "validation_loss": 0.22088810801506042,
+            "validation_accuracy": 0.9208424091339111
+          },
+          {
+            "epoch": 51,
+            "training_loss": 0.18767604231834412,
+            "validation_loss": 0.22059842944145203,
+            "validation_accuracy": 0.9202977418899536
+          },
+          {
+            "epoch": 52,
+            "training_loss": 0.18694272637367249,
+            "validation_loss": 0.2202730029821396,
+            "validation_accuracy": 0.9208424091339111
+          },
+          {
+            "epoch": 53,
+            "training_loss": 0.18616269528865814,
+            "validation_loss": 0.21991240978240967,
+            "validation_accuracy": 0.921023964881897
+          },
+          {
+            "epoch": 54,
+            "training_loss": 0.18533965945243835,
+            "validation_loss": 0.21951881051063538,
+            "validation_accuracy": 0.9204792976379395
+          },
+          {
+            "epoch": 55,
+            "training_loss": 0.18447959423065186,
+            "validation_loss": 0.21909604966640472,
+            "validation_accuracy": 0.9208424091339111
+          },
+          {
+            "epoch": 56,
+            "training_loss": 0.18359073996543884,
+            "validation_loss": 0.21864961087703705,
+            "validation_accuracy": 0.9208424091339111
+          },
+          {
+            "epoch": 57,
+            "training_loss": 0.18268302083015442,
+            "validation_loss": 0.2181863635778427,
+            "validation_accuracy": 0.921023964881897
+          },
+          {
+            "epoch": 58,
+            "training_loss": 0.1817668229341507,
+            "validation_loss": 0.21771448850631714,
+            "validation_accuracy": 0.9213870763778687
+          },
+          {
+            "epoch": 59,
+            "training_loss": 0.1808515340089798,
+            "validation_loss": 0.21724286675453186,
+            "validation_accuracy": 0.9212055206298828
+          }
+        ],
+        "best_validation_loss": 0.21420183777809143,
+        "selection": "시간순 검증 구간의 BCE 손실 최소화"
+      },
+      "test_data": {
+        "rows": 12417,
+        "class_counts": {
+          "1": 3021,
+          "0": 9396
+        },
+        "first_timestamp": "2015-02-02 14:19:00",
+        "last_timestamp": "2015-02-18 09:19:00",
+        "duplicate_timestamps": 0,
+        "file": "data/test_dataset.csv",
+        "sha256": "b906f685ef1140854169af240458f556b0cecc832e8d03fc9a468aaf2b25a698"
+      },
+      "data_audit": {
+        "uci": {
+          "shared_timestamps": 0,
+          "shared_records": 0,
+          "test_rows_before_training": 2665,
+          "test_rows_after_training": 9752
+        },
+        "graz_room_a": {
+          "shared_timestamps": 0,
+          "shared_records": 0,
+          "test_rows_before_training": 0,
+          "test_rows_after_training": 4464
+        },
+        "graz_room_b": {
+          "shared_timestamps": 0,
+          "shared_records": 0,
+          "test_rows_before_training": 0,
+          "test_rows_after_training": 4450
+        }
+      },
+      "quality_gate": {
+        "minimum_accuracy": 0.85,
+        "passed": true
+      },
+      "validation_metrics": {
+        "accuracy": 0.9201161946259986,
+        "precision": 0.8083601286173634,
+        "recall": 0.8984989278055754,
+        "f1": 0.8510494245091401,
+        "roc_auc": 0.9738996721052533,
+        "average_precision": 0.9177494629131681,
+        "probability_mae": 0.13428299129009247,
+        "brier_score": 0.05908193066716194,
+        "confusion_matrix": [
+          [
+            3811,
+            298
+          ],
+          [
+            142,
+            1257
+          ]
+        ]
+      },
+      "model_metrics": {
+        "accuracy": 0.8742852540871386,
+        "precision": 0.6624388072986204,
+        "recall": 0.9854352863290301,
+        "f1": 0.7922821024617431,
+        "roc_auc": 0.9562123951693897,
+        "average_precision": 0.8693605614818379,
+        "probability_mae": 0.19155895709991455,
+        "brier_score": 0.10575180500745773,
+        "confusion_matrix": [
+          [
+            7879,
+            1517
+          ],
+          [
+            44,
+            2977
+          ]
+        ]
+      },
+      "test_sets": {
+        "uci": {
+          "label": "UCI 사무실 평가",
+          "rows": 12417,
+          "metrics": {
+            "accuracy": 0.8742852540871386,
+            "precision": 0.6624388072986204,
+            "recall": 0.9854352863290301,
+            "f1": 0.7922821024617431,
+            "roc_auc": 0.9562123951693897,
+            "average_precision": 0.8693605614818379,
+            "probability_mae": 0.19155895709991455,
+            "brier_score": 0.10575180500745773,
+            "confusion_matrix": [
+              [
+                7879,
+                1517
+              ],
+              [
+                44,
+                2977
+              ]
+            ]
+          },
+          "working_hours": {
+            "definition": "평일 7~19시",
+            "rows": 4497,
+            "majority_baseline_accuracy": 0.6717811874583055,
+            "metrics": {
+              "accuracy": 0.8552368245496998,
+              "precision": 0.8306361607142857,
+              "recall": 0.9854352863290301,
+              "f1": 0.9014383043149129,
+              "roc_auc": 0.8771276089953883,
+              "average_precision": 0.9290570283031194,
+              "probability_mae": 0.22321012616157532,
+              "brier_score": 0.12496207654476166,
+              "confusion_matrix": [
+                [
+                  869,
+                  607
+                ],
+                [
+                  44,
+                  2977
+                ]
+              ]
+            }
+          }
+        },
+        "graz_room_a": {
+          "label": "Graz A 12월 · 미래 기간",
+          "rows": 4464,
+          "metrics": {
+            "accuracy": 0.9661738351254481,
+            "precision": 0.8910761154855643,
+            "recall": 0.9089692101740294,
+            "f1": 0.8999337309476475,
+            "roc_auc": 0.9900347511469967,
+            "average_precision": 0.9363417957991967,
+            "probability_mae": 0.09714744240045547,
+            "brier_score": 0.027184467762708664,
+            "confusion_matrix": [
+              [
+                3634,
+                83
+              ],
+              [
+                68,
+                679
+              ]
+            ]
+          },
+          "working_hours": {
+            "definition": "평일 7~19시",
+            "rows": 1359,
+            "majority_baseline_accuracy": 0.5474613686534217,
+            "metrics": {
+              "accuracy": 0.8933038999264165,
+              "precision": 0.8945981554677207,
+              "recall": 0.9126344086021505,
+              "f1": 0.9035262807717898,
+              "roc_auc": 0.9525723402395315,
+              "average_precision": 0.9474530311862697,
+              "probability_mae": 0.17701245844364166,
+              "brier_score": 0.07740359008312225,
+              "confusion_matrix": [
+                [
+                  535,
+                  80
+                ],
+                [
+                  65,
+                  679
+                ]
+              ]
+            }
+          }
+        },
+        "graz_room_b": {
+          "label": "Graz B 12월 · 학습하지 않은 공간",
+          "rows": 4450,
+          "metrics": {
+            "accuracy": 0.9173033707865168,
+            "precision": 0.8231292517006803,
+            "recall": 0.6470588235294118,
+            "f1": 0.7245508982035929,
+            "roc_auc": 0.9746857819302761,
+            "average_precision": 0.8307443586435268,
+            "probability_mae": 0.1370704174041748,
+            "brier_score": 0.05702986195683479,
+            "confusion_matrix": [
+              [
+                3598,
+                104
+              ],
+              [
+                264,
+                484
+              ]
+            ]
+          },
+          "working_hours": {
+            "definition": "평일 7~19시",
+            "rows": 1342,
+            "majority_baseline_accuracy": 0.5119225037257824,
+            "metrics": {
+              "accuracy": 0.7690014903129657,
+              "precision": 0.8222222222222222,
+              "recall": 0.7001455604075691,
+              "f1": 0.7562893081761006,
+              "roc_auc": 0.8846439325755303,
+              "average_precision": 0.83759704929995,
+              "probability_mae": 0.28812846541404724,
+              "brier_score": 0.15287552773952484,
+              "confusion_matrix": [
+                [
+                  551,
+                  104
+                ],
+                [
+                  206,
+                  481
+                ]
+              ]
+            }
+          }
+        }
+      },
+      "baseline": {
+        "description": "학습 구간의 사용 비율을 모든 평가 행에 동일하게 반환",
+        "training_occupancy_rate": 0.23740125306456006,
+        "metrics": {
+          "accuracy": 0.7567045179995168,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "roc_auc": 0.5,
+          "average_precision": 0.2432954820004832,
+          "probability_mae": 0.3651794304813217,
+          "brier_score": 0.18413753237338484,
+          "confusion_matrix": [
+            [
+              9396,
+              0
+            ],
+            [
+              3021,
+              0
+            ]
+          ]
+        }
+      },
+      "evaluation_notes": [
+        "학습 데이터마다 설정한 비율로 시간순 분할하고 각 모델의 검증 손실로 가중치를 선택합니다.",
+        "평가 정답으로 가중치·임계값을 조정하지 않습니다.",
+        "model_metrics는 이전 버전과 비교하도록 UCI 평가 파일 기준입니다. UCI 평가 파일에는 학습 기간 이전·이후 시점이 함께 있습니다.",
+        "test_sets는 장소·기간별 평가이며 야간·주말을 뺀 평일 업무시간 지표를 다수 클래스 기준선과 함께 제공합니다.",
+        "Hour와 DayOfWeek는 현지 시각 date에서 추출하며 학습·예측이 같은 주기 변환을 사용합니다."
+      ],
+      "future_subset_metrics": {
+        "accuracy": 0.8566447908121411,
+        "precision": 0.5947598253275109,
+        "recall": 0.9970717423133236,
+        "f1": 0.7450765864332604,
+        "roc_auc": 0.9444027024008127,
+        "average_precision": 0.8037813719178428,
+        "probability_mae": 0.21169523894786835,
+        "brier_score": 0.12168904393911362,
+        "confusion_matrix": [
+          [
+            6311,
+            1392
+          ],
+          [
+            6,
+            2043
+          ]
+        ]
+      },
+      "version": "v7"
+    },
+    "without_light": {
+      "format_version": 1,
+      "framework": "pytorch",
+      "feature_mode": "without_light",
+      "encoding": "cyclic-time-v1",
+      "encoded_features": [
+        "Temperature",
+        "Humidity",
+        "CO2",
+        "HourSin",
+        "HourCos"
+      ],
+      "architecture": "MLP 5 → 16 → 8 → 1, tanh",
+      "network_config": {
+        "hidden_layers": [
+          16,
+          8
+        ],
+        "activation": "tanh",
+        "dropout": 0.0
+      },
+      "created_at_utc": "2026-10-14T08:35:09.414572+00:00",
+      "features": [
+        "Temperature",
+        "Humidity",
+        "CO2",
+        "Hour"
+      ],
+      "threshold": 0.5,
+      "random_state": 42,
+      "python_version": "3.12.15",
+      "packages": {
+        "torch": "2.14.1+cpu",
+        "numpy": "2.5.3",
+        "scikit-learn": "1.9.1"
+      },
+      "training_data": {
+        "rows": 27534,
+        "class_counts": {
+          "1": 6628,
+          "0": 20906
+        },
+        "first_timestamp": "2015-02-04 17:51:00",
+        "last_timestamp": "2023-11-30 23:55:00",
+        "duplicate_timestamps": 0,
+        "sources": {
+          "uci": {
+            "rows": 8143,
+            "class_counts": {
+              "1": 1729,
+              "0": 6414
+            },
+            "first_timestamp": "2015-02-04 17:51:00",
+            "last_timestamp": "2015-02-10 09:33:00",
+            "duplicate_timestamps": 0,
+            "file": "data/training_dataset.csv",
+            "sha256": "682acb5af40f7d2a549d3fc579d24cbb830e2291eecc933072198c4edda54e4a"
+          },
+          "graz_room_a": {
+            "rows": 19391,
+            "class_counts": {
+              "1": 4899,
+              "0": 14492
+            },
+            "first_timestamp": "2023-09-12 11:05:00",
+            "last_timestamp": "2023-11-30 23:55:00",
+            "duplicate_timestamps": 0,
+            "file": "data/graz_room_a_train.csv",
+            "sha256": "2a94aafbc979fbf8faf700ba66fda6d841393657b2b9f00cdfa8e55b283fb92a"
+          }
+        }
+      },
+      "training_datasets": {
+        "uci": "UCI 사무실 · 2015년 2월",
+        "graz_room_a": "Graz 사무실 A · 2023년 9~11월"
+      },
+      "training_split": {
+        "rows": 22026,
+        "class_counts": {
+          "1": 5229,
+          "0": 16797
+        },
+        "first_timestamp": "2015-02-04 17:51:00",
+        "last_timestamp": "2023-11-06 11:10:00",
+        "duplicate_timestamps": 0
+      },
+      "validation_split": {
+        "rows": 5508,
+        "class_counts": {
+          "0": 4109,
+          "1": 1399
+        },
+        "first_timestamp": "2015-02-09 06:24:59",
+        "last_timestamp": "2023-11-30 23:55:00",
+        "duplicate_timestamps": 0
+      },
+      "training": {
+        "name": "Graz 보강 · 요일 제외 · tanh",
+        "features": [
+          "Temperature",
+          "Humidity",
+          "Light",
+          "CO2",
+          "Hour"
+        ],
+        "epochs": 200,
+        "learning_rate": 0.01,
+        "batch_size": 0,
+        "hidden_layers": [
+          16,
+          8
+        ],
+        "activation": "tanh",
+        "optimizer": "adam",
+        "dropout": 0.0,
+        "weight_decay": 0.0,
+        "validation_ratio": 0.2,
+        "patience": 30,
+        "threshold": 0.5,
+        "seed": 42,
+        "normalize": true,
+        "balance_classes": false,
+        "compare_light": true,
+        "make_default": false,
+        "datasets": [
+          "uci",
+          "graz_room_a"
+        ],
+        "max_epochs": 200,
+        "epochs_run": 58,
+        "best_epoch": 28,
+        "effective_batch_size": 22026,
+        "history": [
+          {
+            "epoch": 1,
+            "training_loss": 0.7956578731536865,
+            "validation_loss": 0.740386426448822,
+            "validation_accuracy": 0.337872177362442
+          },
+          {
+            "epoch": 2,
+            "training_loss": 0.7514943480491638,
+            "validation_loss": 0.7017493844032288,
+            "validation_accuracy": 0.49164852499961853
+          },
+          {
+            "epoch": 3,
+            "training_loss": 0.7120960354804993,
+            "validation_loss": 0.6670973896980286,
+            "validation_accuracy": 0.7073347568511963
+          },
+          {
+            "epoch": 4,
+            "training_loss": 0.6761993169784546,
+            "validation_loss": 0.6348671317100525,
+            "validation_accuracy": 0.8375090956687927
+          },
+          {
+            "epoch": 5,
+            "training_loss": 0.6426728963851929,
+            "validation_loss": 0.6041277050971985,
+            "validation_accuracy": 0.8680101633071899
+          },
+          {
+            "epoch": 6,
+            "training_loss": 0.6107587814331055,
+            "validation_loss": 0.5744416117668152,
+            "validation_accuracy": 0.8819898366928101
+          },
+          {
+            "epoch": 7,
+            "training_loss": 0.5800646543502808,
+            "validation_loss": 0.5456041693687439,
+            "validation_accuracy": 0.8858024477958679
+          },
+          {
+            "epoch": 8,
+            "training_loss": 0.5504005551338196,
+            "validation_loss": 0.5175343155860901,
+            "validation_accuracy": 0.887981116771698
+          },
+          {
+            "epoch": 9,
+            "training_loss": 0.5216866135597229,
+            "validation_loss": 0.49026691913604736,
+            "validation_accuracy": 0.8892520070075989
+          },
+          {
+            "epoch": 10,
+            "training_loss": 0.4939397871494293,
+            "validation_loss": 0.46394214034080505,
+            "validation_accuracy": 0.8907044529914856
+          },
+          {
+            "epoch": 11,
+            "training_loss": 0.4672592282295227,
+            "validation_loss": 0.4387732744216919,
+            "validation_accuracy": 0.8917937278747559
+          },
+          {
+            "epoch": 12,
+            "training_loss": 0.4417984187602997,
+            "validation_loss": 0.4150072932243347,
+            "validation_accuracy": 0.8925199508666992
+          },
+          {
+            "epoch": 13,
+            "training_loss": 0.41773393750190735,
+            "validation_loss": 0.39289039373397827,
+            "validation_accuracy": 0.8932461738586426
+          },
+          {
+            "epoch": 14,
+            "training_loss": 0.39523807168006897,
+            "validation_loss": 0.3726387023925781,
+            "validation_accuracy": 0.8932461738586426
+          },
+          {
+            "epoch": 15,
+            "training_loss": 0.3744499981403351,
+            "validation_loss": 0.35441285371780396,
+            "validation_accuracy": 0.8954248428344727
+          },
+          {
+            "epoch": 16,
+            "training_loss": 0.35545164346694946,
+            "validation_loss": 0.3382977843284607,
+            "validation_accuracy": 0.8968772888183594
+          },
+          {
+            "epoch": 17,
+            "training_loss": 0.3382512032985687,
+            "validation_loss": 0.3242911398410797,
+            "validation_accuracy": 0.8965141773223877
+          },
+          {
+            "epoch": 18,
+            "training_loss": 0.3227826952934265,
+            "validation_loss": 0.31230631470680237,
+            "validation_accuracy": 0.8974219560623169
+          },
+          {
+            "epoch": 19,
+            "training_loss": 0.308920294046402,
+            "validation_loss": 0.30219313502311707,
+            "validation_accuracy": 0.896151065826416
+          },
+          {
+            "epoch": 20,
+            "training_loss": 0.29650750756263733,
+            "validation_loss": 0.293766587972641,
+            "validation_accuracy": 0.8970588445663452
+          },
+          {
+            "epoch": 21,
+            "training_loss": 0.285392165184021,
+            "validation_loss": 0.28683069348335266,
+            "validation_accuracy": 0.8979666233062744
+          },
+          {
+            "epoch": 22,
+            "training_loss": 0.2754538357257843,
+            "validation_loss": 0.28119564056396484,
+            "validation_accuracy": 0.898692786693573
+          },
+          {
+            "epoch": 23,
+            "training_loss": 0.2666143774986267,
+            "validation_loss": 0.2766898572444916,
+            "validation_accuracy": 0.8999636769294739
+          },
+          {
+            "epoch": 24,
+            "training_loss": 0.2588289976119995,
+            "validation_loss": 0.2731662690639496,
+            "validation_accuracy": 0.9001452326774597
+          },
+          {
+            "epoch": 25,
+            "training_loss": 0.2520643174648285,
+            "validation_loss": 0.27050477266311646,
+            "validation_accuracy": 0.9012345671653748
+          },
+          {
+            "epoch": 26,
+            "training_loss": 0.2462725192308426,
+            "validation_loss": 0.2686123549938202,
+            "validation_accuracy": 0.9010530114173889
+          },
+          {
+            "epoch": 27,
+            "training_loss": 0.241374209523201,
+            "validation_loss": 0.26742151379585266,
+            "validation_accuracy": 0.9008714556694031
+          },
+          {
+            "epoch": 28,
+            "training_loss": 0.23725835978984833,
+            "validation_loss": 0.2668851315975189,
+            "validation_accuracy": 0.9006898999214172
+          },
+          {
+            "epoch": 29,
+            "training_loss": 0.23379702866077423,
+            "validation_loss": 0.26696643233299255,
+            "validation_accuracy": 0.8999636769294739
+          },
+          {
+            "epoch": 30,
+            "training_loss": 0.23086602985858917,
+            "validation_loss": 0.2676253616809845,
+            "validation_accuracy": 0.9005083441734314
+          },
+          {
+            "epoch": 31,
+            "training_loss": 0.22836299240589142,
+            "validation_loss": 0.26880916953086853,
+            "validation_accuracy": 0.899782121181488
+          },
+          {
+            "epoch": 32,
+            "training_loss": 0.22621773183345795,
+            "validation_loss": 0.2704486548900604,
+            "validation_accuracy": 0.8992374539375305
+          },
+          {
+            "epoch": 33,
+            "training_loss": 0.22439086437225342,
+            "validation_loss": 0.2724592983722687,
+            "validation_accuracy": 0.8996005654335022
+          },
+          {
+            "epoch": 34,
+            "training_loss": 0.22286221385002136,
+            "validation_loss": 0.27474379539489746,
+            "validation_accuracy": 0.9001452326774597
+          },
+          {
+            "epoch": 35,
+            "training_loss": 0.2216120809316635,
+            "validation_loss": 0.2771950960159302,
+            "validation_accuracy": 0.8999636769294739
+          },
+          {
+            "epoch": 36,
+            "training_loss": 0.22060436010360718,
+            "validation_loss": 0.2797017991542816,
+            "validation_accuracy": 0.8994190096855164
+          },
+          {
+            "epoch": 37,
+            "training_loss": 0.21978116035461426,
+            "validation_loss": 0.2821572721004486,
+            "validation_accuracy": 0.8985112309455872
+          },
+          {
+            "epoch": 38,
+            "training_loss": 0.2190728634595871,
+            "validation_loss": 0.2844700217247009,
+            "validation_accuracy": 0.8974219560623169
+          },
+          {
+            "epoch": 39,
+            "training_loss": 0.218417689204216,
+            "validation_loss": 0.28657227754592896,
+            "validation_accuracy": 0.8970588445663452
+          },
+          {
+            "epoch": 40,
+            "training_loss": 0.2177780270576477,
+            "validation_loss": 0.28842267394065857,
+            "validation_accuracy": 0.8974219560623169
+          },
+          {
+            "epoch": 41,
+            "training_loss": 0.2171444147825241,
+            "validation_loss": 0.2900052070617676,
+            "validation_accuracy": 0.8979666233062744
+          },
+          {
+            "epoch": 42,
+            "training_loss": 0.21652722358703613,
+            "validation_loss": 0.29132455587387085,
+            "validation_accuracy": 0.8976035118103027
+          },
+          {
+            "epoch": 43,
+            "training_loss": 0.2159416675567627,
+            "validation_loss": 0.292400598526001,
+            "validation_accuracy": 0.8979666233062744
+          },
+          {
+            "epoch": 44,
+            "training_loss": 0.21539384126663208,
+            "validation_loss": 0.2932613492012024,
+            "validation_accuracy": 0.8981481194496155
+          },
+          {
+            "epoch": 45,
+            "training_loss": 0.2148745357990265,
+            "validation_loss": 0.29393720626831055,
+            "validation_accuracy": 0.8981481194496155
+          },
+          {
+            "epoch": 46,
+            "training_loss": 0.21436293423175812,
+            "validation_loss": 0.2944556176662445,
+            "validation_accuracy": 0.8985112309455872
+          },
+          {
+            "epoch": 47,
+            "training_loss": 0.21383747458457947,
+            "validation_loss": 0.2948378026485443,
+            "validation_accuracy": 0.8983296751976013
+          },
+          {
+            "epoch": 48,
+            "training_loss": 0.2132868468761444,
+            "validation_loss": 0.29509690403938293,
+            "validation_accuracy": 0.8981481194496155
+          },
+          {
+            "epoch": 49,
+            "training_loss": 0.21271370351314545,
+            "validation_loss": 0.2952384054660797,
+            "validation_accuracy": 0.8981481194496155
+          },
+          {
+            "epoch": 50,
+            "training_loss": 0.21212978661060333,
+            "validation_loss": 0.29526227712631226,
+            "validation_accuracy": 0.8981481194496155
+          },
+          {
+            "epoch": 51,
+            "training_loss": 0.21154555678367615,
+            "validation_loss": 0.2951667606830597,
+            "validation_accuracy": 0.898692786693573
+          },
+          {
+            "epoch": 52,
+            "training_loss": 0.21096214652061462,
+            "validation_loss": 0.29495206475257874,
+            "validation_accuracy": 0.8985112309455872
+          },
+          {
+            "epoch": 53,
+            "training_loss": 0.21036981046199799,
+            "validation_loss": 0.29462385177612305,
+            "validation_accuracy": 0.898692786693573
+          },
+          {
+            "epoch": 54,
+            "training_loss": 0.20975425839424133,
+            "validation_loss": 0.2941950261592865,
+            "validation_accuracy": 0.8988743424415588
+          },
+          {
+            "epoch": 55,
+            "training_loss": 0.2091059684753418,
+            "validation_loss": 0.2936848998069763,
+            "validation_accuracy": 0.8992374539375305
+          },
+          {
+            "epoch": 56,
+            "training_loss": 0.20842531323432922,
+            "validation_loss": 0.29311704635620117,
+            "validation_accuracy": 0.8996005654335022
+          },
+          {
+            "epoch": 57,
+            "training_loss": 0.20772062242031097,
+            "validation_loss": 0.29251521825790405,
+            "validation_accuracy": 0.8994190096855164
+          },
+          {
+            "epoch": 58,
+            "training_loss": 0.20700165629386902,
+            "validation_loss": 0.29189956188201904,
+            "validation_accuracy": 0.8996005654335022
+          }
+        ],
+        "best_validation_loss": 0.2668851315975189,
+        "selection": "시간순 검증 구간의 BCE 손실 최소화"
+      },
+      "test_data": {
+        "rows": 12417,
+        "class_counts": {
+          "1": 3021,
+          "0": 9396
+        },
+        "first_timestamp": "2015-02-02 14:19:00",
+        "last_timestamp": "2015-02-18 09:19:00",
+        "duplicate_timestamps": 0,
+        "file": "data/test_dataset.csv",
+        "sha256": "b906f685ef1140854169af240458f556b0cecc832e8d03fc9a468aaf2b25a698"
+      },
+      "data_audit": {
+        "uci": {
+          "shared_timestamps": 0,
+          "shared_records": 0,
+          "test_rows_before_training": 2665,
+          "test_rows_after_training": 9752
+        },
+        "graz_room_a": {
+          "shared_timestamps": 0,
+          "shared_records": 0,
+          "test_rows_before_training": 0,
+          "test_rows_after_training": 4464
+        },
+        "graz_room_b": {
+          "shared_timestamps": 0,
+          "shared_records": 0,
+          "test_rows_before_training": 0,
+          "test_rows_after_training": 4450
+        }
+      },
+      "quality_gate": {
+        "minimum_accuracy": 0.85,
+        "passed": false
+      },
+      "validation_metrics": {
+        "accuracy": 0.9006899055918663,
+        "precision": 0.7824933687002652,
+        "recall": 0.8434596140100071,
+        "f1": 0.8118335053319573,
+        "roc_auc": 0.9580671692797292,
+        "average_precision": 0.8759466607619419,
+        "probability_mae": 0.16066886484622955,
+        "brier_score": 0.07648609578609467,
+        "confusion_matrix": [
+          [
+            3781,
+            328
+          ],
+          [
+            219,
+            1180
+          ]
+        ]
+      },
+      "model_metrics": {
+        "accuracy": 0.7815897559797053,
+        "precision": 0.5321807956675693,
+        "recall": 0.8457464415756372,
+        "f1": 0.6532856047046791,
+        "roc_auc": 0.8926954168838563,
+        "average_precision": 0.7010323987490161,
+        "probability_mae": 0.25984278321266174,
+        "brier_score": 0.16385403275489807,
+        "confusion_matrix": [
+          [
+            7150,
+            2246
+          ],
+          [
+            466,
+            2555
+          ]
+        ]
+      },
+      "test_sets": {
+        "uci": {
+          "label": "UCI 사무실 평가",
+          "rows": 12417,
+          "metrics": {
+            "accuracy": 0.7815897559797053,
+            "precision": 0.5321807956675693,
+            "recall": 0.8457464415756372,
+            "f1": 0.6532856047046791,
+            "roc_auc": 0.8926954168838563,
+            "average_precision": 0.7010323987490161,
+            "probability_mae": 0.25984278321266174,
+            "brier_score": 0.16385403275489807,
+            "confusion_matrix": [
+              [
+                7150,
+                2246
+              ],
+              [
+                466,
+                2555
+              ]
+            ]
+          },
+          "working_hours": {
+            "definition": "평일 7~19시",
+            "rows": 4497,
+            "majority_baseline_accuracy": 0.6717811874583055,
+            "metrics": {
+              "accuracy": 0.6820102290415833,
+              "precision": 0.7260585393577721,
+              "recall": 0.8457464415756372,
+              "f1": 0.7813455657492355,
+              "roc_auc": 0.703598635208464,
+              "average_precision": 0.8039910978721849,
+              "probability_mae": 0.3391377031803131,
+              "brier_score": 0.23225688934326172,
+              "confusion_matrix": [
+                [
+                  512,
+                  964
+                ],
+                [
+                  466,
+                  2555
+                ]
+              ]
+            }
+          }
+        },
+        "graz_room_a": {
+          "label": "Graz A 12월 · 미래 기간",
+          "rows": 4464,
+          "metrics": {
+            "accuracy": 0.9594534050179212,
+            "precision": 0.8582278481012658,
+            "recall": 0.9076305220883534,
+            "f1": 0.8822381262199089,
+            "roc_auc": 0.9806387238488525,
+            "average_precision": 0.9113768770406853,
+            "probability_mae": 0.13342878222465515,
+            "brier_score": 0.042358677834272385,
+            "confusion_matrix": [
+              [
+                3605,
+                112
+              ],
+              [
+                69,
+                678
+              ]
+            ]
+          },
+          "working_hours": {
+            "definition": "평일 7~19시",
+            "rows": 1359,
+            "majority_baseline_accuracy": 0.5474613686534217,
+            "metrics": {
+              "accuracy": 0.8690213392200147,
+              "precision": 0.8582278481012658,
+              "recall": 0.9112903225806451,
+              "f1": 0.8839634941329857,
+              "roc_auc": 0.9176348457032957,
+              "average_precision": 0.9218470492115329,
+              "probability_mae": 0.22984209656715393,
+              "brier_score": 0.10905960947275162,
+              "confusion_matrix": [
+                [
+                  503,
+                  112
+                ],
+                [
+                  66,
+                  678
+                ]
+              ]
+            }
+          }
+        },
+        "graz_room_b": {
+          "label": "Graz B 12월 · 학습하지 않은 공간",
+          "rows": 4450,
+          "metrics": {
+            "accuracy": 0.9193258426966292,
+            "precision": 0.7916041979010495,
+            "recall": 0.7058823529411765,
+            "f1": 0.7462897526501767,
+            "roc_auc": 0.9590203806585255,
+            "average_precision": 0.7933110156145049,
+            "probability_mae": 0.15052643418312073,
+            "brier_score": 0.061299096792936325,
+            "confusion_matrix": [
+              [
+                3563,
+                139
+              ],
+              [
+                220,
+                528
+              ]
+            ]
+          },
+          "working_hours": {
+            "definition": "평일 7~19시",
+            "rows": 1342,
+            "majority_baseline_accuracy": 0.5119225037257824,
+            "metrics": {
+              "accuracy": 0.7779433681073026,
+              "precision": 0.7916041979010495,
+              "recall": 0.7685589519650655,
+              "f1": 0.7799113737075333,
+              "roc_auc": 0.8630021000700023,
+              "average_precision": 0.8235495306773495,
+              "probability_mae": 0.2882922291755676,
+              "brier_score": 0.15389318764209747,
+              "confusion_matrix": [
+                [
+                  516,
+                  139
+                ],
+                [
+                  159,
+                  528
+                ]
+              ]
+            }
+          }
+        }
+      },
+      "baseline": {
+        "description": "학습 구간의 사용 비율을 모든 평가 행에 동일하게 반환",
+        "training_occupancy_rate": 0.23740125306456006,
+        "metrics": {
+          "accuracy": 0.7567045179995168,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "roc_auc": 0.5,
+          "average_precision": 0.2432954820004832,
+          "probability_mae": 0.3651794304813217,
+          "brier_score": 0.18413753237338484,
+          "confusion_matrix": [
+            [
+              9396,
+              0
+            ],
+            [
+              3021,
+              0
+            ]
+          ]
+        }
+      },
+      "evaluation_notes": [
+        "학습 데이터마다 설정한 비율로 시간순 분할하고 각 모델의 검증 손실로 가중치를 선택합니다.",
+        "평가 정답으로 가중치·임계값을 조정하지 않습니다.",
+        "model_metrics는 이전 버전과 비교하도록 UCI 평가 파일 기준입니다. UCI 평가 파일에는 학습 기간 이전·이후 시점이 함께 있습니다.",
+        "test_sets는 장소·기간별 평가이며 야간·주말을 뺀 평일 업무시간 지표를 다수 클래스 기준선과 함께 제공합니다.",
+        "Hour와 DayOfWeek는 현지 시각 date에서 추출하며 학습·예측이 같은 주기 변환을 사용합니다."
+      ],
+      "future_subset_metrics": {
+        "accuracy": 0.7467186218211649,
+        "precision": 0.44403084286094124,
+        "recall": 0.8150317227916056,
+        "f1": 0.5748709122203098,
+        "roc_auc": 0.862727704537545,
+        "average_precision": 0.5962431118661505,
+        "probability_mae": 0.2912646234035492,
+        "brier_score": 0.18983787298202515,
+        "confusion_matrix": [
+          [
+            5612,
+            2091
+          ],
+          [
+            379,
+            1670
+          ]
+        ]
+      },
+      "version": "v7"
+    }
+  }
+}

@@ -128,6 +128,11 @@ td:nth-child(2) { max-width: 220px; }
 .architecture { font-size: 11px; color: #829588; margin-top: 17px; }
 .confusion { display: grid; gap: 5px; font-size: 10px; color: #8c9b8f; padding-top: 16px; margin-top: 17px; border-top: 1px solid #edf1ed; }
 .confusion b { font-size: 11px; color: #6c8775; }
+.test-sets { padding-top: 16px; margin-top: 17px; border-top: 1px solid #edf1ed; }
+.test-sets > .section-heading { margin-bottom: 10px; }
+.test-sets > .section-heading .small-note { margin-top: 0; }
+.test-sets table { min-width: 560px; }
+.test-sets td { padding: 12px; }
 .parameter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; gap: 0 22px; }
 .parameter-grid > div { border-bottom: 1px solid #edf1ed; padding: 13px 0; min-width: 0; }
 .parameter-grid dt { font-size: 10px; color: #93a095; }

@@ -9,7 +9,7 @@ WORKDIR /app
 COPY backend/requirements*.txt /app/backend/
 RUN --mount=type=cache,target=/root/.cache/pip python -m pip install -r backend/requirements.txt
 
-COPY data/training_dataset.csv data/test_dataset.csv /app/data/
+COPY data/training_dataset.csv data/test_dataset.csv data/graz_room_a_train.csv data/graz_room_a_test.csv data/graz_room_b_test.csv /app/data/
 COPY backend/ /app/backend/
 COPY models/ /app/models/
 COPY reports/ /app/reports/

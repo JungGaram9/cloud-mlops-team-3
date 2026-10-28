@@ -16,7 +16,9 @@ from backend.app import create_app
 from models.model import (FEATURES, FEATURE_SETS, MIN_ACCURACY, MOCK_SENSORS, REPORTS_DIR,
                           ROOT, SENSOR_FEATURES, WEIGHTS_DIR, SensorInput, current_version,
                           input_vector, load_model, pair_fingerprint, predict_one, weight_path)
-from models.train import (TrainingConfig, load_dataset, require_accuracy, run_training_job,
+from models.prepare_data import prepare
+from models.train import (TEST_SETS, TRAINING_SOURCES, TrainingConfig, audit_sources, load_dataset,
+                          load_test_sets, load_training_sources, require_accuracy, run_training_job,
                           save_model_pair, split_training, train_experiment, write_json)
 
 VERSION = "v3" if weight_path("v3").is_file() else current_version()
@@ -274,8 +276,12 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([item["key"] for item in result["features"]], list(FEATURES))
             self.assertEqual(result["features"][-1]["minimum"], 0)
             self.assertEqual(result["features"][-1]["maximum"], 6)
-            self.assertEqual(result["training_data"]["rows"], 8143)
-            self.assertEqual(result["split_strategy"], "chronological")
+            self.assertEqual([item["key"] for item in result["training_sources"]], list(TRAINING_SOURCES))
+            self.assertEqual([item["key"] for item in result["test_sets"]], list(TEST_SETS))
+            self.assertEqual(result["training_sources"][0]["rows"], 8143)
+            self.assertEqual(result["training_data"]["rows"], sum(item["rows"] for item in result["training_sources"]))
+            self.assertEqual(result["test_data"]["rows"], sum(item["rows"] for item in result["test_sets"]))
+            self.assertEqual(result["split_strategy"], "chronological per dataset")
 
     def test_invalid_training_settings_never_start_a_process(self):
         cases = [{"features": []}, {"features": ["Unknown"]}, {"features": ["Light", "Light"]},
@@ -283,7 +289,8 @@ class ApiTests(unittest.TestCase):
                  {"hidden_layers": [2]}, {"hidden_layers": [True]}, {"hidden_layers": [8, 8, 8, 8]},
                  {"normalize": "true"}, {"activation": "unknown"}, {"optimizer": "unknown"},
                  {"seed": -1}, {"patience": -1}, {"threshold": 1}, {"validation_ratio": 0.5},
-                 {"dropout": 0.8}, {"weight_decay": 0.2}, {"name": "  "}, {"unknown": 1}]
+                 {"dropout": 0.8}, {"weight_decay": 0.2}, {"name": "  "}, {"unknown": 1},
+                 {"datasets": []}, {"datasets": ["unknown"]}, {"datasets": ["uci", "uci"]}]
         with patch("backend.app.subprocess.Popen") as process, TestClient(create_app()) as client:
             for fields in cases:
                 with self.subTest(fields=fields):
@@ -373,6 +380,34 @@ class TrainingTests(unittest.TestCase):
             self.assertEqual(report["config"], config.model_dump())
             self.assertEqual(len(report["models"]["with_light"]["training"]["history"]), 3)
             self.assertTrue((reports / version / "training.md").is_file())
+            self.assertEqual(report["config"]["datasets"], list(TRAINING_SOURCES))
+            primary = report["models"]["with_light"]
+            sources = load_training_sources()
+            self.assertEqual(primary["training_split"]["rows"] + primary["validation_split"]["rows"],
+                             sum(len(data.y) for data in sources.values()))
+            self.assertTrue(primary["validation_split"]["first_timestamp"].startswith("2015"))
+            self.assertTrue(primary["validation_split"]["last_timestamp"].startswith("2023"))
+            self.assertEqual(set(primary["test_sets"]), set(TEST_SETS))
+            for result in primary["test_sets"].values():
+                work = result["working_hours"]
+                self.assertLess(work["rows"], result["rows"])
+                self.assertGreaterEqual(work["majority_baseline_accuracy"], 0.5)
+                self.assertIn("accuracy", work["metrics"])
+            self.assertEqual(primary["model_metrics"], primary["test_sets"]["uci"]["metrics"])
+            self.assertIn("장소·기간별 평가", (reports / version / "training.md").read_text(encoding="utf-8"))
+
+    def test_dataset_selection_and_audit_follow_each_site(self):
+        tests = load_test_sets()
+        uci_only = audit_sources(load_training_sources(["uci"]), tests)
+        self.assertEqual(uci_only["uci"]["test_rows_before_training"], 2665)
+        self.assertEqual(uci_only["uci"]["test_rows_after_training"], 9752)
+        self.assertIsNone(uci_only["graz_room_b"]["test_rows_after_training"])
+        combined = audit_sources(load_training_sources(), tests)
+        self.assertEqual(combined["graz_room_a"]["test_rows_after_training"], len(tests["graz_room_a"].y))
+        self.assertEqual(combined["graz_room_b"]["shared_timestamps"], 0)
+        with self.assertRaises(ValueError):
+            audit_sources({"graz_room_a": tests["graz_room_a"]}, tests)
+        self.assertEqual(TrainingConfig(datasets=["graz_room_a", "uci"]).datasets, ["uci", "graz_room_a"])
 
     def test_every_explicit_training_run_preserves_a_new_version_even_if_identical(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -428,6 +463,52 @@ class TrainingTests(unittest.TestCase):
             self.assertEqual(read_json(jobs / f"{job_id}.json")["status"], "failed")
             self.assertEqual(read_json(jobs / f"{job_id}.json")["error"], "학습 검증 오류")
             self.assertEqual(list(weights.glob("v*")), [])
+
+
+class DataPreparationTests(unittest.TestCase):
+    def write_room(self, directory, rows, label_dates=None):
+        directory.mkdir(parents=True)
+        with (directory / "df_features.csv").open("w", encoding="utf-8", newline="") as output:
+            writer = csv.writer(output)
+            writer.writerow(["Date", "humidity", "co2", "temperature", "light"])
+            writer.writerows([[date, 30.0, 600.0, 22.0, 400.0] for date, _ in rows])
+        with (directory / "df_occ.csv").open("w", encoding="utf-8", newline="") as output:
+            writer = csv.writer(output)
+            writer.writerow(["Date", "Image-based-occupancy"])
+            writer.writerows([[date, count] for date, (_, count) in zip(label_dates or [date for date, _ in rows], rows)])
+
+    def test_graz_conversion_uses_vienna_local_time_and_binary_labels(self):
+        rows = [("2023-10-27 09:05:00+00:00", 3), ("2023-11-30 23:05:00+00:00", 0), ("2023-12-01 08:00:00+00:00", 1)]
+        with tempfile.TemporaryDirectory() as directory:
+            source, output = Path(directory) / "interim", Path(directory) / "out"
+            output.mkdir()
+            for room in ("Room_A", "Room_B"):
+                self.write_room(source / room, rows)
+            counts = prepare(source, output)
+            self.assertEqual(counts, {"graz_room_a_train.csv": 1, "graz_room_a_test.csv": 2, "graz_room_b_test.csv": 2})
+            def converted(filename):
+                with (output / filename).open(encoding="utf-8", newline="") as source_file:
+                    return [(row["date"], row["Occupancy"]) for row in csv.DictReader(source_file)]
+            self.assertEqual(converted("graz_room_a_train.csv"), [("2023-10-27 11:05:00", "1")])
+            self.assertEqual(converted("graz_room_a_test.csv"), [("2023-12-01 00:05:00", "0"), ("2023-12-01 09:00:00", "1")])
+
+    def test_graz_conversion_rejects_misaligned_labels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "interim"
+            self.write_room(source / "Room_A", [("2023-10-27 09:05:00+00:00", 1)], ["2023-10-27 09:10:00+00:00"])
+            self.write_room(source / "Room_B", [("2023-10-27 09:05:00+00:00", 1)])
+            with self.assertRaisesRegex(ValueError, "시각"):
+                prepare(source, Path(directory))
+
+    def test_committed_graz_files_match_conversion(self):
+        from models.prepare_data import OUTPUTS, SOURCE_DIR
+        if not SOURCE_DIR.is_dir():
+            self.skipTest("Graz 원본 데이터가 없는 실행 환경")
+        with tempfile.TemporaryDirectory() as directory:
+            prepare(SOURCE_DIR, Path(directory))
+            for filename in OUTPUTS:
+                with self.subTest(filename=filename):
+                    self.assertEqual((Path(directory) / filename).read_bytes(), (ROOT / "data" / filename).read_bytes())
 
 
 if __name__ == "__main__":
