@@ -12,7 +12,7 @@ const server = await createServer({
   plugins: [react(), { name: 'verify-components', enforce: 'pre', transform(source, id) {
     if (!id.endsWith('/src/main.jsx')) return;
     return source.slice(0, source.indexOf('const reactRoot ='))
-      + '\nexport { evaluationGroups, Dashboard, TrainingForm, ReportPanel, reusableTrainingConfig, DEFAULT_CONFIG, PRESETS };';
+      + '\nexport { evaluationGroups, Dashboard, TrainingForm, TrainingMonitor, ReportPanel, reusableTrainingConfig, DEFAULT_CONFIG, PRESETS };';
   } }],
 });
 try {
@@ -72,7 +72,21 @@ try {
   assert.deepEqual(imported.features, oldReport.config.features);
   assert.equal(imported.activation, oldReport.config.activation);
   assert.deepEqual(Object.keys(imported).sort(), Object.keys(ui.DEFAULT_CONFIG).sort());
-  console.log('PASS: JSX rendering; SHA-256 + row grouping; per-group best; source distributions; preflight disable; preview form ownership');
+  const damaged = { id: 'invalid-name', status: 'failed', history_error: true, config: { name: '읽을 수 없는 이력' },
+    phase: '학습 이력 읽기 오류', error: '이 학습 이력만 읽지 못했습니다. 원본 파일은 보존됩니다.', curves: {} };
+  const monitor = renderToStaticMarkup(React.createElement(ui.TrainingMonitor, {
+    job: damaged, jobs: [damaged], values: ui.PRESETS[0].values,
+  }));
+  assert.match(monitor, /학습 이력 읽기 오류/);
+  assert.match(monitor, /원본 파일은 보존됩니다/);
+  assert.doesNotMatch(monitor, /학습 중지<\/button>/);
+  const olderError = renderToStaticMarkup(React.createElement(ui.TrainingMonitor, {
+    job: null, jobs: [...Array.from({ length: 8 }, (_, index) => ({ id: String(index), status: 'completed',
+      config: { name: '정상 이력' } })), damaged], values: ui.PRESETS[0].values,
+  }));
+  assert.match(olderError, /role="alert"/);
+  assert.match(olderError, /학습 이력 1개를 읽지 못했습니다/);
+  console.log('PASS: JSX rendering; SHA-256 + row grouping; per-group best; source distributions; preflight disable; preview form ownership; unreadable job display');
 } finally {
   await server.close();
   await fs.rm(cacheDir, { recursive: true, force: true });

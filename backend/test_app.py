@@ -259,17 +259,23 @@ class ModelTests(unittest.TestCase):
 
 class ApiTests(unittest.TestCase):
     def setUp(self):
-        # 실제 실행 중인 학습 이력과 기본 모델을 테스트가 변경하지 않는다.
+        # 관리 API 테스트는 운영 이력·로그·시연 상태에 접근하지 않는다.
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        self.jobs_dir = Path(directory.name)
+        self.root = Path(directory.name)
+        self.jobs_dir = self.root / "jobs"
+        self.jobs_dir.mkdir()
         for target, value in (("backend.app.JOBS_DIR", self.jobs_dir), ("backend.app.current_version", lambda: VERSION)):
             fixture = patch(target, value)
             fixture.start()
             self.addCleanup(fixture.stop)
 
+    def create_app(self, *args, **kwargs):
+        return create_app(*args, log_root=self.root / "logs", state_dir=self.root / "state",
+                          enable_classrooms=kwargs.pop("enable_classrooms", False), start_simulation=False, **kwargs)
+
     def test_versions_group_two_models_under_current_version(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             response = client.get("/versions")
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["current_version"], VERSION)
@@ -279,18 +285,18 @@ class ApiTests(unittest.TestCase):
             self.assertTrue(all(item["checkpoint_exists"] for item in pair["models"]))
 
     def test_compare_returns_actual_two_model_predictions(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             response = client.post("/compare", json=MOCK_SENSORS)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["with_light"], predict_one(load_model(MODEL_PATH), MOCK_SENSORS))
             self.assertEqual(response.json()["without_light"], predict_one(load_model(NO_LIGHT_PATH), MOCK_SENSORS))
 
     def test_comparison_endpoint_matches_report(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             self.assertEqual(client.get("/comparison").json(), read_json(COMPARISON_PATH))
 
     def test_api_prediction_matches_saved_model(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             self.assertEqual(client.get("/health").json(), {
                 "status": "ok", "model_version": VERSION, "framework": "pytorch",
             })
@@ -299,7 +305,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(response.json(), predict_one(load_model(MODEL_PATH), MOCK_SENSORS))
 
     def test_swagger_and_assets_are_served_locally(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             self.assertEqual(client.get("/", follow_redirects=False).headers["location"], "/docs")
             docs = client.get("/docs")
             self.assertEqual(docs.status_code, 200)
@@ -310,7 +316,7 @@ class ApiTests(unittest.TestCase):
                     self.assertEqual(client.get("/static/swagger/" + asset).status_code, 200)
 
     def test_openapi_example_and_error_status_match_api(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             schema = client.get("/openapi.json").json()
             self.assertEqual(schema["components"]["schemas"]["SensorInput"]["examples"][0], MOCK_SENSORS)
             responses = schema["paths"]["/predict"]["post"]["responses"]
@@ -318,7 +324,7 @@ class ApiTests(unittest.TestCase):
             self.assertNotIn("422", responses)
 
     def test_metrics_endpoint_matches_report(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             self.assertEqual(client.get("/metrics").json(), read_json(REPORT_PATH))
 
     def test_input_rejects_invalid_types_and_ranges(self):
@@ -327,7 +333,7 @@ class ApiTests(unittest.TestCase):
                  ("CO2", 0), ("CO2", None), ("Light", 1e100), ("CO2", 1e100),
                  ("Hour", -1), ("Hour", 24), ("Hour", 14.5), ("Hour", True),
                  ("DayOfWeek", -1), ("DayOfWeek", 7), ("DayOfWeek", "2")]
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             for field, value in cases:
                 with self.subTest(field=field, value=value):
                     response = client.post("/predict", json={**MOCK_SENSORS, field: value})
@@ -335,14 +341,14 @@ class ApiTests(unittest.TestCase):
                     self.assertIn("error", response.json())
 
     def test_missing_and_extra_fields_are_rejected(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             missing = {name: value for name, value in MOCK_SENSORS.items() if name != "CO2"}
             for body in (missing, {**MOCK_SENSORS, "Occupancy": 1}, [MOCK_SENSORS]):
                 with self.subTest(body=body):
                     self.assertEqual(client.post("/predict", json=body).status_code, 400)
 
     def test_malformed_and_nonfinite_json_are_rejected(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             bodies = ["{", json.dumps({**MOCK_SENSORS, "CO2": float("nan")}),
                       json.dumps({**MOCK_SENSORS, "CO2": float("inf")})]
             for body in bodies:
@@ -353,13 +359,13 @@ class ApiTests(unittest.TestCase):
 
     def test_missing_model_stops_startup(self):
         with self.assertRaises(FileNotFoundError):
-            with TestClient(create_app(MODEL_PATH.parent / "missing.pt")):
+            with TestClient(self.create_app(MODEL_PATH.parent / "missing.pt")):
                 pass
 
     def test_historical_pair_uses_its_own_weights_and_ignores_unused_time(self):
         if not (WEIGHTS_DIR / "v2/model.pt").is_file():
             self.skipTest("이전 v2 가중치가 없는 독립 실행 환경")
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             response = client.post("/compare?version=v2", json=MOCK_SENSORS)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["with_light"], predict_one(load_model(weight_path("v2")), MOCK_SENSORS))
@@ -369,12 +375,12 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(client.get("/comparison?version=v2").json()["model_version"], "v2")
 
     def test_invalid_or_unavailable_version_is_rejected(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             self.assertEqual(client.post("/compare?version=v999999", json=MOCK_SENSORS).status_code, 404)
             self.assertEqual(client.get("/comparison?version=invalid").status_code, 400)
 
     def test_training_catalog_returns_raw_feature_ranges_and_settings(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             result = client.get("/training/options").json()
             self.assertEqual(result["defaults"], TrainingConfig().model_dump())
             self.assertEqual([item["key"] for item in result["features"]], list(FEATURES))
@@ -390,7 +396,7 @@ class ApiTests(unittest.TestCase):
                  {"normalize": "true"}, {"activation": "unknown"}, {"optimizer": "unknown"},
                  {"seed": -1}, {"patience": -1}, {"threshold": 1}, {"validation_ratio": 0.5},
                  {"dropout": 0.8}, {"weight_decay": 0.2}, {"name": "  "}, {"unknown": 1}]
-        with patch("backend.app.subprocess.Popen") as process, TestClient(create_app()) as client:
+        with patch("backend.app.subprocess.Popen") as process, TestClient(self.create_app()) as client:
             for fields in cases:
                 with self.subTest(fields=fields):
                     self.assertEqual(client.post("/training/jobs", json=fields).status_code, 400)
@@ -401,7 +407,7 @@ class ApiTests(unittest.TestCase):
         process = Mock()
         process.poll.return_value = None
         process.pid = 12345
-        with patch("backend.app.subprocess.Popen", return_value=process) as spawn, TestClient(create_app()) as client:
+        with patch("backend.app.subprocess.Popen", return_value=process) as spawn, TestClient(self.create_app()) as client:
             response = client.post("/training/jobs", json={"features": ["CO2", "Hour"], "name": "선택 피처 실험"})
             self.assertEqual(response.status_code, 202)
             job_id = response.json()["id"]
@@ -419,12 +425,70 @@ class ApiTests(unittest.TestCase):
         process = Mock()
         process.poll.return_value = None
         process.pid = 12345
-        with patch("backend.app.subprocess.Popen", return_value=process), TestClient(create_app()) as client:
+        with patch("backend.app.subprocess.Popen", return_value=process), TestClient(self.create_app()) as client:
             self.assertEqual(client.get(f"/training/jobs/{job_id}").json()["status"], "failed")
             self.assertEqual(client.post("/training/jobs", json={}).status_code, 202)
 
+    def test_unreadable_history_keeps_api_and_valid_jobs_available_without_rewriting_files(self):
+        valid = {"id": "a" * 32, "status": "completed", "created_at_utc": "2026-10-28T10:00:00+00:00",
+                 "config": TrainingConfig().model_dump()}
+        write_json(self.jobs_dir / f"{valid['id']}.json", valid)
+        cases = [{"status": None}, {"status": "unknown"}, {"created_at_utc": "yesterday"},
+                 {"created_at_utc": "2026-10-28T10:00:00"}, {"config": []}, {"pid": "123"}, {"id": "other"}]
+        for index, changes in enumerate(cases, 1):
+            job_id = f"{index:032x}"
+            record = {**valid, "id": job_id, **changes}
+            if changes == {"status": None}:
+                record.pop("status")
+            write_json(self.jobs_dir / f"{job_id}.json", record)
+        (self.jobs_dir / f"{'b' * 32}.json").write_text("{", encoding="utf-8")
+        (self.jobs_dir / f"{'c' * 32}.json").write_text("[]", encoding="utf-8")
+        write_json(self.jobs_dir / "invalid-name.json", valid)
+        original = {path.name: path.read_bytes() for path in self.jobs_dir.glob("*.json")}
+        process = Mock(pid=12345)
+        process.poll.return_value = None
+        with patch("backend.app.subprocess.Popen", return_value=process) as spawn, \
+                TestClient(self.create_app(enable_classrooms=True)) as client:
+            self.assertEqual(client.get("/health").status_code, 200)
+            self.assertEqual(client.get("/classrooms").json()["counts"]["total"], 6)
+            response = client.get("/training/jobs")
+            self.assertEqual(response.status_code, 200)
+            records = response.json()["jobs"]
+            self.assertEqual(len(records), len(original))
+            self.assertEqual(next(item for item in records if item["id"] == valid["id"])["status"], "completed")
+            errors = [item for item in records if item.get("history_error")]
+            self.assertEqual(len(errors), len(original) - 1)
+            for item in errors:
+                self.assertIn("이 학습 이력만", item["error"])
+                if item["id"] != "invalid-name":
+                    self.assertTrue(client.get(f"/training/jobs/{item['id']}").json()["history_error"])
+                    self.assertEqual(client.post(f"/training/jobs/{item['id']}/cancel").status_code, 409)
+            self.assertEqual({path.name: path.read_bytes() for path in self.jobs_dir.glob("*.json")}, original)
+            self.assertEqual(client.post("/training/jobs", json={}).status_code, 202)
+            self.assertEqual(client.post("/training/jobs", json={}).status_code, 409)
+            spawn.assert_called_once()
+        events = [json.loads(line) for path in (self.root / "logs").glob("*/api.jsonl")
+                  for line in path.read_text(encoding="utf-8").splitlines()]
+        unreadable = [item for item in events if item.get("event") == "unreadable"]
+        self.assertEqual({item["job_file"] for item in unreadable}, set(original) - {f"{valid['id']}.json"})
+        self.assertTrue(all(item["reason"] and item["error_type"] for item in unreadable))
+
+    def test_corrupted_active_history_still_blocks_duplicate_submission(self):
+        process = Mock(pid=12345)
+        process.poll.return_value = None
+        with patch("backend.app.subprocess.Popen", return_value=process) as spawn, TestClient(self.create_app()) as client:
+            response = client.post("/training/jobs", json={})
+            self.assertEqual(response.status_code, 202)
+            job_id = response.json()["id"]
+            path = self.jobs_dir / f"{job_id}.json"
+            path.write_text("{}", encoding="utf-8")
+            self.assertTrue(client.get("/training/jobs").json()["jobs"][0]["history_error"])
+            self.assertEqual(client.post("/training/jobs", json={}).status_code, 409)
+            self.assertEqual(path.read_text(encoding="utf-8"), "{}")
+            spawn.assert_called_once()
+
     def test_legacy_training_report_does_not_invent_missing_settings(self):
-        with TestClient(create_app()) as client:
+        with TestClient(self.create_app()) as client:
             report = client.get(f"/versions/{VERSION}/training").json()
             self.assertTrue(report["legacy"])
             self.assertIsNone(report["config"])
@@ -442,7 +506,7 @@ class ApiTests(unittest.TestCase):
         write_json(weights / "current.json", {"version": VERSION})
         def selected():
             return read_json(weights / "current.json")["version"]
-        with patch("backend.app.WEIGHTS_DIR", weights), patch("backend.app.current_version", selected), TestClient(create_app()) as client:
+        with patch("backend.app.WEIGHTS_DIR", weights), patch("backend.app.current_version", selected), TestClient(self.create_app()) as client:
             self.assertEqual(client.post("/versions/v2/activate").status_code, 200)
             self.assertEqual(client.get("/health").json()["model_version"], "v2")
             self.assertEqual(client.post("/predict", json=MOCK_SENSORS).json(), predict_one(load_model(weight_path("v2")), MOCK_SENSORS))
