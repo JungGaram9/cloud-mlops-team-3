@@ -55,11 +55,42 @@ def job_path(job_id: str) -> Path:
     return JOBS_DIR / f"{job_id}.json"
 
 
-def read_job(job_id: str, processes: dict | None = None) -> dict:
+def load_job_record(path: Path, job_id: str) -> dict:
+    record = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(record, dict) or record.get("id") != job_id:
+        raise ValueError("작업 id가 파일명과 일치하지 않습니다.")
+    if record.get("status") not in ("queued", "running", "completed", "failed", "cancelled"):
+        raise ValueError("작업 status가 없거나 올바르지 않습니다.")
+    created = record.get("created_at_utc")
+    if not isinstance(created, str) or datetime.fromisoformat(created).utcoffset() is None:
+        raise ValueError("created_at_utc에는 시간대가 포함된 시각이 필요합니다.")
+    config = record.get("config")
+    if not isinstance(config, dict) or not isinstance(config.get("name"), str):
+        raise ValueError("작업 config.name이 없거나 올바르지 않습니다.")
+    if record.get("pid") is not None and (type(record["pid"]) is not int or record["pid"] <= 0):
+        raise ValueError("작업 pid는 양의 정수여야 합니다.")
+    return record
+
+
+def unreadable_job(path: Path, error: Exception, logger=None) -> dict:
+    if logger is not None:
+        logger.write("api", "training_history", event="unreadable", job_file=path.name,
+                     error_type=type(error).__name__, reason=str(error))
+    # 손상된 원본을 덮어쓰지 않고 조회에만 사용할 오류 항목을 반환한다.
+    return {"id": path.stem, "status": "failed", "phase": "학습 이력 읽기 오류", "history_error": True,
+            "created_at_utc": None, "config": {"name": f"읽을 수 없는 이력: {path.name}"},
+            "version": None, "curves": {}, "cancel_requested": False,
+            "error": f"이 학습 이력만 읽지 못했습니다. 원본 파일은 보존됩니다: {error}"}
+
+
+def read_job(job_id: str, processes: dict | None = None, logger=None) -> dict:
     path = job_path(job_id)
     if not path.is_file():
         raise HTTPException(404, "학습 작업을 찾을 수 없습니다.")
-    record = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        record = load_job_record(path, job_id)
+    except (OSError, ValueError) as error:
+        return unreadable_job(path, error, logger)
     if record["status"] in ("queued", "running"):
         process = (processes or {}).get(job_id)
         interrupted = False
@@ -77,7 +108,10 @@ def read_job(job_id: str, processes: dict | None = None) -> dict:
             interrupted = age > 30
         if interrupted:
             # 프로세스 종료 직전에 완료 상태를 저장했을 수 있으므로 다시 읽는다.
-            record = json.loads(path.read_text(encoding="utf-8"))
+            try:
+                record = load_job_record(path, job_id)
+            except (OSError, ValueError) as error:
+                return unreadable_job(path, error, logger)
             if record["status"] in ("queued", "running"):
                 record.update(status="failed", phase="학습 중단", error="학습 프로세스가 중단되었습니다. 새 학습을 시작할 수 있습니다.",
                               finished_at_utc=datetime.now(timezone.utc).isoformat())
@@ -86,9 +120,14 @@ def read_job(job_id: str, processes: dict | None = None) -> dict:
     return record
 
 
-def list_jobs(processes=None):
-    records = [read_job(path.stem, processes) for path in JOBS_DIR.glob("*.json")]
-    return sorted(records, key=lambda item: item["created_at_utc"], reverse=True)
+def list_jobs(processes=None, logger=None):
+    records = []
+    for path in JOBS_DIR.glob("*.json"):
+        try:
+            records.append(read_job(path.stem, processes, logger))
+        except HTTPException:
+            records.append(unreadable_job(path, ValueError("작업 파일명은 32자리 소문자 16진수여야 합니다."), logger))
+    return sorted(records, key=lambda item: item["created_at_utc"] or "", reverse=True)
 
 
 def create_app(model_path: Path | None = None, *, log_root: Path | None = None, state_dir: Path | None = None,
@@ -137,7 +176,7 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
                 logger.write("api", "lifecycle", event="model_unavailable", error_type=type(error).__name__)
             try:
                 JOBS_DIR.mkdir(parents=True, exist_ok=True)
-                list_jobs()
+                list_jobs(logger=logger)
             except (OSError, ValueError) as error:
                 logger.write("api", "lifecycle", event="model_management_unavailable", error_type=type(error).__name__)
             if enable_classrooms:
@@ -378,7 +417,7 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
 
     @application.get("/training/jobs", summary="학습 작업 상태와 이력", tags=["학습"])
     def jobs():
-        records = list_jobs(application.state.processes)
+        records = list_jobs(application.state.processes, application.state.runtime_logger)
         application.state.processes = {
             job_id: process for job_id, process in application.state.processes.items()
             if process.poll() is None
@@ -390,10 +429,13 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
     def start_training(config: TrainingConfig, request: Request):
         try:
             with FileLock(JOBS_DIR / ".submission.lock", timeout=0):
-                records = list_jobs(application.state.processes)
-                active = next((item for item in records if item["status"] in ("queued", "running")), None)
-                if active:
-                    raise HTTPException(409, f"진행 중인 학습이 있습니다: {active['id']}")
+                records = list_jobs(application.state.processes, application.state.runtime_logger)
+                active_id = next((item["id"] for item in records if item["status"] in ("queued", "running")), None)
+                # 이력이 손상돼도 API가 추적 중인 실제 프로세스는 중복 제출을 막는다.
+                active_id = active_id or next((job_id for job_id, process in application.state.processes.items()
+                                               if process.poll() is None), None)
+                if active_id:
+                    raise HTTPException(409, f"진행 중인 학습이 있습니다: {active_id}")
                 try:
                     plan = training_options(config.validation_ratio)["data_plan"]
                 except (OSError, ValueError, KeyError) as error:
@@ -443,11 +485,11 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
 
     @application.get("/training/jobs/{job_id}", summary="진행률·손실·학습 결과", tags=["학습"])
     def job(job_id: str):
-        return read_job(job_id, application.state.processes)
+        return read_job(job_id, application.state.processes, application.state.runtime_logger)
 
     @application.post("/training/jobs/{job_id}/cancel", summary="학습 중지 요청", tags=["학습"])
     def cancel(job_id: str, request: Request):
-        record = read_job(job_id, application.state.processes)
+        record = read_job(job_id, application.state.processes, application.state.runtime_logger)
         if record["status"] not in ("queued", "running"):
             raise HTTPException(409, "이미 종료된 학습입니다.")
         (JOBS_DIR / f"{job_id}.cancel").touch()

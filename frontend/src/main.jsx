@@ -471,6 +471,7 @@ function TrainingForm({ config, options, previewLimits, values, setValues, busy,
 
 function TrainingMonitor({ job, jobs, cancelling, onCancel, onViewReport, onInspect, selected,
   report, reportLoading, values, predicting, onPredict, predictions, previewVersion }) {
+  const unreadableCount = jobs.filter(item => item.history_error).length;
   const primaryModel = report?.models.with_light;
   const primaryPrediction = predictions?.with_light;
   const inputError = predictionError(values, report?.input_limits?.with_light);
@@ -516,6 +517,9 @@ function TrainingMonitor({ job, jobs, cancelling, onCancel, onViewReport, onInsp
       </form>
       <section className="panel">
         <div className="section-heading"><h3>최근 학습 요청</h3><span className="badge neutral">{jobs.length}</span></div>
+        {unreadableCount > 0 && <p className="inline-error" role="alert">
+          학습 이력 {unreadableCount}개를 읽지 못했습니다. 해당 원본 파일은 보존되며 정상 이력은 계속 조회할 수 있습니다.
+        </p>}
         <div className="job-history">
           {jobs.length ? jobs.slice(0, 8).map(item => (
             <button key={item.id} onClick={() => onInspect(item)}>
@@ -629,7 +633,7 @@ function ModelManagement() {
         const recent = history.jobs.find(activeJob) || history.jobs[0];
         setJob(recent || null);
         if (activeJob(recent)) setConfig(recent.config);
-        else if (recent) {
+        else if (recent && !recent.history_error) {
           handledJob.current.add(recent.id);
           const detail = await request(`/training/jobs/${recent.id}`, { signal: controller.signal });
           setJob(previous => previous?.id === recent.id ? detail : previous);
@@ -801,7 +805,7 @@ function ModelManagement() {
   async function inspectJob(item) {
     if (!activeJob(job) || item.id === job.id) {
       try {
-        const detail = await request(`/training/jobs/${item.id}`);
+        const detail = item.history_error ? item : await request(`/training/jobs/${item.id}`);
         setJob(previous => activeJob(previous) && previous.id !== item.id ? previous : detail);
       } catch (cause) { setError(cause.message); }
     }
