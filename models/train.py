@@ -28,13 +28,10 @@ from sklearn.metrics import (accuracy_score, average_precision_score, brier_scor
 from scripts.runtime_logging import RuntimeLogger
 
 from models.model import (ENCODING, FEATURES, FEATURE_SETS, MIN_ACCURACY, REPORTS_DIR,
-                          ROOT, SEED, SENSOR_FEATURES, THRESHOLD, WEIGHTS_DIR,
+                          ROOT, SENSOR_FEATURES, THRESHOLD, WEIGHTS_DIR,
                           OccupancyNetwork, SensorInput, encoded_features, input_vector,
                           pair_fingerprint)
 
-MAX_EPOCHS = 200
-PATIENCE = 30
-LEARNING_RATE = 0.01
 JOBS_DIR = REPORTS_DIR / "jobs"
 SPLIT_STRATEGY = "source_chronological"
 
