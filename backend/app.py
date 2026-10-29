@@ -187,7 +187,11 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
                             "threshold": model.metadata["threshold"], "fingerprint": pair["fingerprint"]}
                 try:
                     service = ClassroomService(state_dir or Path(os.environ.get("CLASSROOM_STATE_DIR", ROOT / "state")),
-                        classroom_predict, logger, stale_after=float(os.environ.get("SENSOR_STALE_SECONDS", "60")))
+                        classroom_predict, logger, stale_after=float(os.environ.get("SENSOR_STALE_SECONDS", "60")),
+                        light_min_lux=float(os.environ.get("LIGHT_CHECK_MIN_LUX", "300")),
+                        light_max_co2=float(os.environ.get("LIGHT_CHECK_MAX_CO2_PPM", "650")),
+                        light_hold_seconds=float(os.environ.get("LIGHT_CHECK_HOLD_SECONDS", "600")),
+                        light_max_gap_seconds=float(os.environ.get("LIGHT_CHECK_MAX_GAP_SECONDS", "120")))
                     application.state.classrooms = service
                     if start_simulation:
                         await asyncio.to_thread(service.emit)

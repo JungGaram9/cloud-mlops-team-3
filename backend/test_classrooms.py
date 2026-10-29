@@ -126,6 +126,121 @@ class ClassroomTests(unittest.TestCase):
         self.assertEqual(receipt["inference_id"], latest["inference_id"])
         self.assertIn(latest["prediction"]["occupancy"], (0, 1))
 
+    def test_light_check_requires_continuous_measurements_and_preserves_model_prediction(self):
+        origin = self.time
+        self.measurement(identity="brief", Light=300.0, CO2=650.0, Humidity=99.0)
+        self.assertEqual(self.service.room_view("101")["light_check"]["state"], "monitoring")
+        self.time += timedelta(seconds=59)
+        self.measurement(identity="brief-end", Light=299.0, CO2=650.0)
+        self.assertEqual(self.service.room_view("101")["light_check"]["state"], "clear")
+        for minute in range(2, 13):
+            self.time = origin + timedelta(minutes=minute)
+            self.measurement(identity=f"bright-{minute}", Light=300.0, CO2=650.0, Humidity=90.0)
+        room = self.service.room_view("101")
+        self.assertEqual(room["status"], "occupied")
+        self.assertTrue(room["light_check"]["requires_check"])
+        self.assertTrue(room["light_check"]["model_disagrees"])
+        self.assertEqual(room["light_check"]["duration_seconds"], 600)
+        self.assertEqual(self.service.snapshot()["counts"]["light_check"], 1)
+        log = self.logger.directory / "model.jsonl"
+        original = log.read_bytes()
+        calls = self.predict.call_count
+        self.time += timedelta(seconds=10)
+        for _ in range(5):
+            self.assertEqual(self.service.room_view("101")["light_check"]["duration_seconds"], 600)
+            self.service.snapshot()
+        self.assertEqual(self.predict.call_count, calls)
+        self.assertEqual(log.read_bytes(), original)
+        events = [json.loads(line) for line in original.decode().splitlines()]
+        changes = [item for item in events if item["event_type"] == "patrol"]
+        self.assertEqual([item["state"] for item in changes], ["monitoring", "clear", "monitoring", "attention"])
+        self.assertEqual(changes[-1]["rules"]["basis"], "demo_assumption")
+        self.assertEqual(changes[-1]["evidence"]["Humidity"], 90.0)
+
+    def test_light_check_resets_after_receive_gap_and_rejects_old_or_future_real_times(self):
+        self.measurement(identity="start", CO2=500.0)
+        self.time += timedelta(seconds=61)
+        self.assertEqual(self.service.room_view("101")["light_check"]["state"], "stale")
+        self.measurement(identity="resumed", CO2=500.0)
+        self.assertEqual(self.service.room_view("101")["light_check"]["duration_seconds"], 0)
+        self.time += timedelta(minutes=5)
+        self.measurement(identity="old", date=(self.time - timedelta(minutes=2)).isoformat(), CO2=500.0)
+        self.assertEqual(self.service.room_view("101")["light_check"]["state"], "stale")
+        self.measurement(identity="future", date=(self.time + timedelta(seconds=20)).isoformat(), CO2=500.0)
+        self.assertFalse(self.service.room_view("101")["light_check"]["requires_check"])
+        self.assertEqual(self.service.room_view("101")["light_check"]["state"], "stale")
+
+    def test_late_and_duplicate_measurements_do_not_extend_light_check(self):
+        original = self.time
+        self.measurement(identity="start", CO2=500.0)
+        self.time += timedelta(seconds=30)
+        self.measurement(identity="new", CO2=500.0)
+        before = self.service.room_view("101")["light_check"]
+        self.assertTrue(self.measurement(identity="start", date=original.isoformat(), CO2=500.0)["duplicate"])
+        self.assertFalse(self.measurement(identity="late", date=(original + timedelta(seconds=10)).isoformat(), CO2=500.0)["accepted_as_latest"])
+        self.assertFalse(self.measurement(identity="same-time", CO2=500.0)["accepted_as_latest"])
+        self.assertEqual(self.service.room_view("101")["light_check"], before)
+
+    def test_service_restart_source_switch_and_simulation_restart_reset_light_continuity(self):
+        self.measurement(identity="first", CO2=500.0)
+        self.time += timedelta(seconds=30)
+        self.measurement(identity="second", CO2=500.0)
+        self.service.close()
+        self.service = ClassroomService(self.root / "state", self.predict, self.logger, now=lambda: self.time)
+        self.assertEqual(self.service.room_view("101")["light_check"]["state"], "waiting")
+        self.assertEqual(self.service.room_view("101")["light_check"]["duration_seconds"], 0)
+        self.time += timedelta(seconds=30)
+        self.measurement(identity="after-restart", CO2=500.0)
+        self.assertEqual(self.service.room_view("101")["light_check"]["duration_seconds"], 0)
+        self.service.set_source("101", "simulation")
+        self.assertEqual(self.service.room_view("101")["light_check"]["state"], "waiting")
+        self.service.control("restart")
+        self.assertFalse(self.service.room_view("101")["light_check"]["requires_check"])
+        self.service.set_source("101", "real")
+        self.measurement(identity="back-real", CO2=500.0)
+        self.assertEqual(self.service.room_view("101")["light_check"]["duration_seconds"], 0)
+
+    def test_simulation_light_check_is_identical_at_all_speeds_and_freezes_when_paused(self):
+        reference = None
+        for speed in (1, 5, 10, 20):
+            with self.subTest(speed=speed):
+                self.service.control("restart")
+                self.service.simulation.update(minute=720.0, last_emitted=None)
+                self.service.emit()
+                self.service.control("speed", speed)
+                self.service.advance(60 / speed)
+                check = self.service.room_view("103")["light_check"]
+                self.assertTrue(check["requires_check"])
+                current = (check["since"], check["duration_seconds"])
+                reference = reference or current
+                self.assertEqual(current, reference)
+                self.service.control("pause")
+                self.service.advance(100)
+                paused = self.service.room_view("103")["light_check"]
+                self.assertEqual(paused["state"], "paused")
+                self.assertFalse(paused["requires_check"])
+                self.assertEqual(paused["duration_seconds"], check["duration_seconds"])
+        self.time += timedelta(seconds=61)
+        self.assertEqual(self.service.room_view("103")["light_check"]["state"], "stale")
+
+    def test_large_virtual_gap_and_rule_change_restart_candidate_time(self):
+        session = self.service.simulation["session_id"]
+        for minute in (780, 781, 785):
+            self.service.ingest("103", measurement_id=f"virtual-{minute}",
+                observed_at=(self.time + timedelta(minutes=minute)).isoformat(),
+                sensors={"Temperature": 22.0, "Humidity": 30.0, "Light": 450.0, "CO2": 500.0},
+                source="simulation", session_id=session)
+        self.assertEqual(self.service.room_view("103")["light_check"]["duration_seconds"], 0)
+        self.service.light_rules = {**self.service.light_rules, "min_lux": 400}
+        self.assertEqual(self.service.room_view("103")["light_check"]["state"], "waiting")
+
+    def test_existing_simulation_session_keeps_original_scenario_until_restart(self):
+        self.service.simulation.update(minute=780.0, scenario_id="classroom-day-v1")
+        self.service.emit()
+        self.assertLess(self.service.room_view("103")["latest"]["sensors"]["Light"], 300)
+        self.service.control("restart")
+        self.assertEqual(self.service.simulation["scenario_id"], "classroom-day-v2")
+
 
 class ClassroomApiTests(unittest.TestCase):
     def test_operational_api_is_independent_of_training_options(self):
@@ -134,6 +249,8 @@ class ClassroomApiTests(unittest.TestCase):
             with patch.object(api, "JOBS_DIR", root / "jobs"), TestClient(api.create_app(
                     log_root=root / "logs", state_dir=root / "state", start_simulation=False)) as client:
                 self.assertEqual(client.get("/classrooms").json()["counts"]["total"], 6)
+                self.assertEqual(client.get("/classrooms").json()["counts"]["light_check"], 0)
+                self.assertEqual(client.get("/classrooms/101").json()["light_check"]["rules"]["hold_seconds"], 600)
                 with patch.object(api, "load_dataset", side_effect=ValueError("fixture data unavailable")):
                     self.assertEqual(client.get("/training/options").status_code, 400)
                     self.assertEqual(client.get("/classrooms").status_code, 200)
