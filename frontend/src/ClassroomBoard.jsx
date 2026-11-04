@@ -168,6 +168,6 @@ export default function ClassroomBoard() {
         </table></div></details>
       </> : <p className="guard-empty">상세 정보를 불러오는 중입니다.</p>}
     </section>
-    <footer className="guard-footer">시연 명칭의 예시 강의실 6개 · 재실 추정 서비스 · 로그인·권한 관리는 이번 구현에 포함되지 않습니다.</footer>
+    <footer className="guard-footer">시연 명칭의 예시 강의실 6개 · 재실 추정 서비스 · AWS EC2 배포 · 로그인·권한 관리는 이번 구현에 포함되지 않습니다.</footer>
   </main>;
 }
