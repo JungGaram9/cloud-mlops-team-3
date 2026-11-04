@@ -1,0 +1,10 @@
+# 화면 빌드에는 프론트엔드 소스와 nginx 설정만 보낸다.
+**
+!frontend/
+!frontend/**
+!deploy/
+!deploy/nginx.conf
+frontend/node_modules/
+frontend/dist/
+**/.env
+**/.env.*
