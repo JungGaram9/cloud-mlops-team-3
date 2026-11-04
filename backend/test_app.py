@@ -28,6 +28,16 @@ REPORT_PATH = REPORTS_DIR / VERSION / "metrics.json"
 COMPARISON_PATH = REPORTS_DIR / VERSION / "light_comparison.json"
 
 
+def setUpModule():
+    """실행 중인 API와 같은 state·logs 저장소를 테스트가 열지 않도록 임시 경로로 격리한다."""
+    runtime = Path(tempfile.mkdtemp())
+    unittest.addModuleCleanup(shutil.rmtree, runtime, ignore_errors=True)
+    for runtime_patch in (patch.dict(os.environ, {"CLASSROOM_STATE_DIR": str(runtime / "state")}),
+                          patch("scripts.runtime_logging.LOGS_DIR", runtime / "logs")):
+        runtime_patch.start()
+        unittest.addModuleCleanup(runtime_patch.stop)
+
+
 def read_json(path):
     return json.loads(path.read_text(encoding="utf-8"))
 

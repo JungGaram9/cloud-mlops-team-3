@@ -19,7 +19,8 @@ COPY reports/ /app/reports/
 # 빌드에서는 학습·평가·학습 테스트를 실행하지 않는다. 초기 준비는 런타임 trainer가 담당한다.
 
 RUN useradd --create-home --uid 10001 classroom \
-    && mkdir -p /app/logs /app/state && chown classroom:classroom /app/logs /app/state
+    && mkdir -p /app/logs /app/state \
+    && chown -R classroom:classroom /app/logs /app/state /app/models/weights /app/reports
 USER classroom
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
