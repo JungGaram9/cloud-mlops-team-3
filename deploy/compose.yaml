@@ -17,6 +17,10 @@ services:
     environment:
       CLASSROOM_STATE_DIR: /app/state
       SENSOR_STALE_SECONDS: ${SENSOR_STALE_SECONDS:-60}
+      LIGHT_CHECK_MIN_LUX: ${LIGHT_CHECK_MIN_LUX:-300}
+      LIGHT_CHECK_MAX_CO2_PPM: ${LIGHT_CHECK_MAX_CO2_PPM:-650}
+      LIGHT_CHECK_HOLD_SECONDS: ${LIGHT_CHECK_HOLD_SECONDS:-600}
+      LIGHT_CHECK_MAX_GAP_SECONDS: ${LIGHT_CHECK_MAX_GAP_SECONDS:-120}
     volumes:
       - state:/app/state
       - logs:/app/logs

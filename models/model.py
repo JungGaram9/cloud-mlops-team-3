@@ -19,7 +19,7 @@ SENSOR_FEATURES = ("Temperature", "Humidity", "Light", "CO2")
 FEATURES = (*SENSOR_FEATURES, "Hour", "DayOfWeek")
 FEATURE_SETS = {"with_light": FEATURES, "without_light": tuple(name for name in FEATURES if name != "Light")}
 ENCODING = "cyclic-time-v1"
-THRESHOLD, MIN_ACCURACY, SEED = 0.5, 0.85, 42
+THRESHOLD, MIN_ACCURACY = 0.5, 0.85
 MOCK_SENSORS = {"Temperature": 22.5, "Humidity": 45.0, "Light": 450.0, "CO2": 900.0,
                 "Hour": 14, "DayOfWeek": 2}
 _FINGERPRINT_CACHE: dict[str, tuple[tuple, str]] = {}

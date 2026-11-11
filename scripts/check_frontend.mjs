@@ -12,7 +12,7 @@ const server = await createServer({
   plugins: [react(), { name: 'verify-components', enforce: 'pre', transform(source, id) {
     if (!id.endsWith('/src/main.jsx')) return;
     return source.slice(0, source.indexOf('const reactRoot ='))
-      + '\nexport { evaluationGroups, Dashboard, TrainingForm, ReportPanel, reusableTrainingConfig, DEFAULT_CONFIG, PRESETS };';
+      + '\nexport { evaluationGroups, Dashboard, TrainingForm, TrainingMonitor, ReportPanel, reusableTrainingConfig, DEFAULT_CONFIG, PRESETS };';
   } }],
 });
 try {
@@ -72,7 +72,71 @@ try {
   assert.deepEqual(imported.features, oldReport.config.features);
   assert.equal(imported.activation, oldReport.config.activation);
   assert.deepEqual(Object.keys(imported).sort(), Object.keys(ui.DEFAULT_CONFIG).sort());
-  console.log('PASS: JSX rendering; SHA-256 + row grouping; per-group best; source distributions; preflight disable; preview form ownership');
+  const damaged = { id: 'invalid-name', status: 'failed', history_error: true, config: { name: '읽을 수 없는 이력' },
+    phase: '학습 이력 읽기 오류', error: '이 학습 이력만 읽지 못했습니다. 원본 파일은 보존됩니다.', curves: {} };
+  const monitor = renderToStaticMarkup(React.createElement(ui.TrainingMonitor, {
+    job: damaged, jobs: [damaged], values: ui.PRESETS[0].values,
+  }));
+  assert.match(monitor, /학습 이력 읽기 오류/);
+  assert.match(monitor, /원본 파일은 보존됩니다/);
+  assert.doesNotMatch(monitor, /학습 중지<\/button>/);
+  const olderError = renderToStaticMarkup(React.createElement(ui.TrainingMonitor, {
+    job: null, jobs: [...Array.from({ length: 8 }, (_, index) => ({ id: String(index), status: 'completed',
+      config: { name: '정상 이력' } })), damaged], values: ui.PRESETS[0].values,
+  }));
+  assert.match(olderError, /role="alert"/);
+  assert.match(olderError, /학습 이력 1개를 읽지 못했습니다/);
+  const board = await server.ssrLoadModule('/src/ClassroomBoard.jsx');
+  const room = { id: '103', name: '시연 103호', floor: 1, source: 'simulation', status: 'occupied',
+    latest: { observed_at: '2026-10-29T13:00:00Z', received_at: '2026-10-29T04:00:00Z',
+      sensors: { Light: 450, CO2: 500, Humidity: 28, Temperature: 22 },
+      prediction: { occupancy: 1, probability: 0.7, model_version: 'v7' } },
+    light_check: { state: 'attention', requires_check: true, model_disagrees: true, duration_seconds: 600,
+      since: '2026-10-29T12:50:00Z', time_basis: 'simulation',
+      message: '밝은 상태가 계속되고 있습니다. 사람이 있는지 확인해 주세요.',
+      rules: { min_lux: 300, max_co2_ppm: 650, hold_seconds: 600 } } };
+  const normal = { ...room, id: '101', name: '시연 101호', light_check: { ...room.light_check, state: 'clear', requires_check: false } };
+  const stale = { ...room, id: '201', name: '시연 201호', floor: 2, status: 'stale', message: '수신 지연 · 연결 확인 필요' };
+  const paused = { ...room, id: '202', name: '시연 202호', floor: 2, simulation_paused: true };
+  const uncertain = { ...room, id: '102', name: '시연 102호', light_check: { ...room.light_check, state: 'monitoring', requires_check: false } };
+  const rooms = [normal, stale, paused, uncertain, room];
+  assert.equal(board.filterRooms(rooms)[0].id, '103');
+  assert.deepEqual(board.filterRooms(rooms, { filter: 'light_check' }).map(item => item.id), ['103']);
+  assert.deepEqual(board.filterRooms(rooms, { filter: 'attention' }).map(item => item.id), ['201']);
+  assert.equal(board.filterRooms(rooms, { floor: '2' }).length, 2);
+  assert.equal(board.filterRooms(rooms, { search: ' 103 ' }).length, 1);
+  assert.equal(board.roomPresentation(room, true).kind, 'connection');
+  assert.equal(board.roomPresentation(paused).kind, 'paused');
+  assert.equal(board.roomPresentation(uncertain).label, '확인 중');
+  const card = renderToStaticMarkup(React.createElement(board.RoomCard, { room, onSelect() {} }));
+  assert.match(card, /불 확인 필요/);
+  assert.match(card, /사용 여부 예상.*사용 중/);
+  assert.doesNotMatch(card, /v7|70%/);
+  const reason = renderToStaticMarkup(React.createElement(board.LightCheckPanel, { room }));
+  assert.match(reason, /300 lux 이상.*650 ppm 이하.*10분 지속/);
+  assert.match(reason, /모델은 사용 중으로 예상했지만/);
+  assert.match(reason, /햇빛.*환기/);
+  assert.match(reason, /실제 시설에서는 기준 교정/);
+  const offline = renderToStaticMarkup(React.createElement(board.LightCheckPanel, { room, disconnected: true }));
+  assert.doesNotMatch(offline, /불 확인 필요/);
+  const pausedCard = renderToStaticMarkup(React.createElement(board.RoomCard, { room: paused, onSelect() {} }));
+  assert.doesNotMatch(pausedCard, /불 확인 필요/);
+  assert.match(pausedCard, /현재 실시간 상태가 아닙니다/);
+  const history = [0, 60, 300].map((second, index) => ({ accepted_as_latest: true,
+    observed_at: new Date(Date.parse('2026-10-29T12:00:00Z') + second * 1000).toISOString(), sensors: { Humidity: 28 + index } }));
+  const trend = renderToStaticMarkup(React.createElement(board.SensorTrend, { history, sensor: 'Humidity' }));
+  assert.match(trend, /습도 변화/);
+  assert.match(trend, /처음 대비 \+2/);
+  assert.match(trend, /d="M[^"M]*M/);
+  const backward = renderToStaticMarkup(React.createElement(board.SensorTrend, { history: [...history].reverse(), sensor: 'Humidity' }));
+  assert.match(backward, /<path d="M284[^"L]*" class="trend-line humidity"/);
+  const initial = renderToStaticMarkup(React.createElement(board.default));
+  assert.match(initial, /불을 확인할 강의실을 먼저/);
+  assert.match(initial, /별도 순찰 참고 신호/);
+  assert.match(initial, /05:00~24:00/);
+  assert.match(initial, /AWS EC2 배포/);
+  console.log('PASS: patrol priority/filter; model coexistence; connection/pause suppression; thresholds/limits; humidity trend gap; initial board');
+  console.log('PASS: JSX rendering; SHA-256 + row grouping; per-group best; source distributions; preflight disable; preview form ownership; unreadable job display');
 } finally {
   await server.close();
   await fs.rm(cacheDir, { recursive: true, force: true });

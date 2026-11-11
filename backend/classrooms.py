@@ -80,7 +80,7 @@ class SourceControl(BaseModel):
     source: Literal["simulation", "real"]
 
 
-def scenario_sensors(room_id, minute):
+def scenario_sensors(room_id, minute, scenario_id="classroom-day-v2"):
     """시간표는 센서 변화에만 사용한다. 재실 상태는 이 함수에서 결정하지 않는다."""
     offset = list(ROOMS).index(room_id)
     activity, co2 = 0.0, 0.0
@@ -90,18 +90,29 @@ def scenario_sensors(room_id, minute):
             activity += (1 - math.exp(-duration / 3)) * math.exp(-max(0, minute - end) / 5)
             co2 += (360 + offset * 12) * (1 - math.exp(-duration / 18)) * math.exp(-max(0, minute - end) / 25)
     daylight = max(0, math.sin(math.pi * (minute - 480) / 840))
+    # v2의 103호는 수업 뒤에도 밝기가 남는다. 확인 신호는 이 설정을 직접 읽지 않는다.
+    remaining_light = 0
+    if scenario_id == "classroom-day-v2" and room_id == "103" and minute >= 720:
+        remaining_light = 450 * (1 - math.exp(-(minute - 720) / 3)) * min(1, max(0, (850 - minute) / 10))
     return {"Temperature": round(20.1 + offset * 0.12 + 0.65 * daylight + 0.6 * activity, 6),
             "Humidity": round(24.3 + offset * 0.2 + 1.4 * math.sin((minute - 480) / 210) - 0.6 * activity, 6),
-            "Light": round(8 + 14 * daylight + (470 + offset * 12) * activity, 6),
+            "Light": round(8 + 14 * daylight + (470 + offset * 12) * activity + remaining_light, 6),
             "CO2": round(450 + offset * 13 + co2, 6)}
 
 
 class ClassroomService:
-    def __init__(self, directory, predict, logger, *, stale_after=60, now=None):
+    def __init__(self, directory, predict, logger, *, stale_after=60, now=None,
+                 light_min_lux=300, light_max_co2=650, light_hold_seconds=600, light_max_gap_seconds=120):
         if not math.isfinite(stale_after) or stale_after <= 0:
             raise ValueError("센서 수신 지연 기준은 0보다 큰 초 단위 값이어야 합니다.")
         self.now = now or (lambda: datetime.now(timezone.utc))
         self.predict, self.logger, self.stale_after = predict, logger, stale_after
+        self.light_rules = {"min_lux": light_min_lux, "max_co2_ppm": light_max_co2,
+                            "hold_seconds": light_hold_seconds, "max_gap_seconds": light_max_gap_seconds,
+                            "basis": "demo_assumption"}
+        if any(not math.isfinite(value) or value <= 0 for key, value in self.light_rules.items() if key != "basis"):
+            raise ValueError("불빛 확인 기준은 유한한 양수여야 합니다.")
+        self.continuity_id = uuid.uuid4().hex
         self.lock = threading.RLock()
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
@@ -130,7 +141,7 @@ class ClassroomService:
             raise
 
     def new_session(self):
-        return {"session_id": uuid.uuid4().hex, "scenario_id": "classroom-day-v1", "day": self.now().date().isoformat(),
+        return {"session_id": uuid.uuid4().hex, "scenario_id": "classroom-day-v2", "day": self.now().date().isoformat(),
                 "minute": float(DAY_START), "playing": True, "speed": 5, "last_emitted": None}
 
     def save_clock(self):
@@ -140,6 +151,30 @@ class ClassroomService:
     def require_room(self, room_id):
         if room_id not in ROOMS:
             raise KeyError("강의실을 찾을 수 없습니다.")
+
+    def evaluate_light(self, previous, record):
+        """새 유효 측정 사이의 시간만 누적한다. 습도와 모델 출력은 조건에 넣지 않는다."""
+        observed = datetime.fromisoformat(record["observed_at"]).astimezone(timezone.utc)
+        received = datetime.fromisoformat(record["received_at"])
+        age = (received - observed).total_seconds()
+        valid_time = record["source"] == "simulation" or -5 <= age <= self.stale_after
+        candidate = valid_time and record["sensors"]["Light"] >= self.light_rules["min_lux"] \
+            and record["sensors"]["CO2"] <= self.light_rules["max_co2_ppm"]
+        prior = (previous or {}).get("light_check", {})
+        continuous = False
+        if previous and prior.get("continuity_id") == self.continuity_id and prior.get("rules") == self.light_rules:
+            gap = (observed - datetime.fromisoformat(previous["observed_at"]).astimezone(timezone.utc)).total_seconds()
+            receive_gap = (received - datetime.fromisoformat(previous["received_at"])).total_seconds()
+            continuous = (previous["source"] == record["source"] and previous.get("session_id") == record.get("session_id")
+                          and 0 < gap <= self.light_rules["max_gap_seconds"] and 0 <= receive_gap <= self.stale_after
+                          and prior.get("state") in ("monitoring", "attention"))
+        since = prior["since"] if candidate and continuous else record["observed_at"] if candidate else None
+        duration = max(0, (observed - datetime.fromisoformat(since)).total_seconds()) if since else 0
+        state = "unavailable" if not valid_time else "attention" if candidate and duration >= self.light_rules["hold_seconds"] \
+            else "monitoring" if candidate else "clear"
+        return {"state": state, "since": since, "duration_seconds": duration, "evaluated_at": record["observed_at"],
+                "time_basis": "simulation" if record["source"] == "simulation" else "measurement",
+                "rules": self.light_rules, "continuity_id": self.continuity_id}
 
     def ingest(self, room_id, *, measurement_id, observed_at, sensors, source, session_id=None, scenario_id=None, request_id=None):
         self.require_room(room_id)
@@ -168,6 +203,7 @@ class ClassroomService:
                       "inference_id": None, "error": None, "accepted_as_latest": not is_late}
             result = None
             if not is_late:
+                record["light_check"] = self.evaluate_light(latest, record)
                 try:
                     result = self.predict(inputs)
                     record.update(prediction=result["prediction"], inference_id=uuid.uuid4().hex,
@@ -186,6 +222,13 @@ class ClassroomService:
                     self.db.execute("UPDATE rooms SET source=?,latest=? WHERE id=?", (source, json.dumps(record), room_id))
             self.logger.write("model", "measurement", event="received", request_id=request_id, source=source,
                               sensors=sensors, accepted_as_latest=not is_late, error=record["error"], **context)
+            if not is_late:
+                before, after = (latest or {}).get("light_check", {}), record["light_check"]
+                if any(before.get(key) != after[key] for key in ("state", "since", "rules")):
+                    self.logger.write("model", "patrol", event="light_check_changed", request_id=request_id,
+                        source=source, previous_state=before.get("state"), state=after["state"], since=after["since"],
+                        duration_seconds=after["duration_seconds"], rules=self.light_rules,
+                        evidence={key: sensors[key] for key in ("Light", "CO2", "Humidity")}, **context)
             if result is not None:
                 self.logger.inference(request_id=request_id, sensors=inputs, version=result["prediction"]["model_version"],
                     mode="with_light", features=result["features"], threshold=result["threshold"], fingerprint=result["fingerprint"],
@@ -198,7 +241,7 @@ class ClassroomService:
         for name, mode in self.db.execute("SELECT id,source FROM rooms").fetchall():
             if mode == "simulation":
                 self.ingest(name, measurement_id=f"{self.simulation['session_id']}:{name}:{minute}",
-                    observed_at=observed.isoformat(), sensors=scenario_sensors(name, minute), source="simulation",
+                    observed_at=observed.isoformat(), sensors=scenario_sensors(name, minute, self.simulation["scenario_id"]), source="simulation",
                     session_id=self.simulation["session_id"], scenario_id=self.simulation["scenario_id"], request_id=request_id)
         self.simulation["last_emitted"] = minute
         self.save_clock()
@@ -207,9 +250,14 @@ class ClassroomService:
         with self.lock:
             if not self.simulation["playing"]:
                 return
-            self.simulation["minute"] = min(float(DAY_END), self.simulation["minute"] + max(0, elapsed) * self.simulation["speed"])
+            target = min(float(DAY_END), self.simulation["minute"] + max(0, elapsed) * self.simulation["speed"])
             if int(self.simulation["minute"]) != self.simulation["last_emitted"]:
                 self.emit()
+            # 고배속에서도 건너뛴 1분 측정들을 생성해 같은 가상 시간의 판단이 같게 한다.
+            for minute in range(int(self.simulation["minute"]) + 1, int(target) + 1):
+                self.simulation["minute"] = float(minute)
+                self.emit()
+            self.simulation["minute"] = target
             if self.simulation["minute"] >= DAY_END:
                 self.simulation["playing"] = False
             self.save_clock()
@@ -247,6 +295,30 @@ class ClassroomService:
         return {**self.simulation, "observed_at": date.isoformat(), "timezone": "UTC", "start": f"{DAY_START // 60:02}:00",
                 "end": f"{DAY_END // 60:02}:00", "finished": minute >= DAY_END}
 
+    def light_view(self, latest, status, paused):
+        signal = dict((latest or {}).get("light_check", {}))
+        state = signal.get("state", "waiting")
+        if status in ("waiting", "stale", "unavailable"):
+            state = status
+        elif latest["source"] == "real" and not -5 <= (self.now() - datetime.fromisoformat(latest["observed_at"])).total_seconds() <= self.stale_after:
+            state = "stale"
+        elif paused:
+            state = "paused"
+        elif signal.get("continuity_id") != self.continuity_id or signal.get("rules") != self.light_rules:
+            state = "waiting"
+            signal.update(duration_seconds=0, since=None)
+        messages = {"attention": "밝은 상태가 계속되고 있습니다. 사람이 있는지 확인해 주세요.",
+                    "monitoring": "밝기가 높고 CO₂가 낮은 상태입니다. 지속 시간을 확인 중입니다.",
+                    "clear": "현재 불 확인 참고 조건에 해당하지 않습니다.",
+                    "waiting": "새로운 연속 측정을 확인 중입니다.",
+                    "stale": "연결과 측정 시각을 확인해 주세요. 마지막 참고 신호를 현재 상태로 보지 마세요.",
+                    "paused": "시연 정지 중입니다. 아래 값은 마지막 측정의 참고 정보입니다.",
+                    "unavailable": "새 유효 측정과 예상 상태를 확인할 수 없습니다."}
+        return {**signal, "state": state, "requires_check": state == "attention", "message": messages[state],
+                "rules": self.light_rules, "model_disagrees": state == "attention" and bool(latest["prediction"]["occupancy"]),
+                "duration_seconds": signal.get("duration_seconds", 0), "since": signal.get("since"),
+                "evaluated_at": signal.get("evaluated_at"), "time_basis": "simulation" if latest and latest["source"] == "simulation" else "measurement"}
+
     def room_view(self, room_id, detail=False):
         self.require_room(room_id)
         with self.lock:
@@ -264,7 +336,8 @@ class ClassroomService:
                     status = "occupied" if latest["prediction"]["occupancy"] else "vacant"
                     message = "모델이 추정한 사용 상태"
             result = {**ROOMS[room_id], "source": mode, "latest": latest, "status": status, "message": message,
-                      "age_seconds": age, "simulation_paused": paused}
+                      "age_seconds": age, "simulation_paused": paused,
+                      "light_check": self.light_view(latest, status, paused)}
             if detail:
                 result["history"] = [json.loads(row[0]) for row in self.db.execute(
                     "SELECT record FROM history WHERE room_id=? ORDER BY seq DESC LIMIT ?", (room_id, HISTORY_LIMIT))][::-1]
@@ -279,6 +352,7 @@ class ClassroomService:
                     "stale_after_seconds": self.stale_after, "history_limit": HISTORY_LIMIT,
                     "counts": {"total": len(rooms), "occupied": sum(r["status"] == "occupied" for r in rooms),
                                "vacant": sum(r["status"] == "vacant" for r in rooms),
+                               "light_check": sum(r["light_check"]["requires_check"] for r in rooms),
                                "attention": sum(r["status"] not in ("occupied", "vacant") for r in rooms)}}
 
     async def run(self):
