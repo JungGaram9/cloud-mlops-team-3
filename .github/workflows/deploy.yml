@@ -36,7 +36,7 @@ jobs:
         # PR·배포 검증에서는 학습 프로세스를 실행하지 않고 저장 모델과 API 계약을 확인한다.
         run: |
           python -m unittest \
-            backend.test_app.ApiTests \
+            backend.test_app.ApiTests scripts.test_simulate \
             backend.test_classrooms backend.test_data backend.test_logging \
             backend.test_app.ModelTests.test_without_light_ignores_changed_light \
             backend.test_app.ModelTests.test_saved_pytorch_model_returns_same_prediction \

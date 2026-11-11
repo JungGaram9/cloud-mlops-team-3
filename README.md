@@ -243,6 +243,57 @@ curl http://localhost:8000/compare?version=v3 --json @backend/examples/mock_sens
 
 `models/prepare_data.py`와 `graz_*.csv`는 이전 v7의 전처리·평가 자료로 보존하며 현재 학습 경로에는 연결하지 않습니다. 현재 학습은 통합 CSV 두 개와 출처 메타데이터만 사용합니다. v7 가중치·보고서는 읽을 수 있지만 원본 학습 범위를 검증할 수 없으면 입력 제한을 복원하지 않습니다. 이전 설정을 불러올 때는 현재 API가 지원하는 항목만 적용하고, 이전 전용 데이터 선택 옵션은 제외했다고 표시합니다.
 
+## 독립 가상 센서 CSV 생성기
+
+`scripts/simulate.py`는 분류 모델 학습과 분리된 확률적 상황·동적 센서 생성기입니다. 원본행을 재생하지 않고 새 인원·전등·환기 상태를 만든 뒤 CO₂ 질량수지, 일광·날씨·방 특성, 냉난방·온습도 반응과 센서 공분산 기반 시간상관 잡음으로 센서를 계산합니다. `Occupancy`는 가상 인원수가 0명보다 큰지로만 정합니다.
+
+### 빠른 시작
+
+Docker Desktop을 실행한 뒤 저장소 루트에서 아래 명령을 실행합니다. 생성기만 필요하면 웹·API를 먼저 띄울 필요가 없습니다.
+
+```cmd
+docker compose build simulator
+docker compose run --rm --no-deps simulator
+```
+
+이미지를 준비한 뒤에는 두 번째 명령만 실행하면 됩니다. 빌드는 학습을 실행하지 않습니다. `simulator`는 선택적인 `simulation-tools` 프로필에만 속하고 일반 `docker compose up`에는 실행되지 않습니다. API·trainer를 의존 서비스로 시작하지 않고 원본 데이터는 읽기 전용, `data/simulated`만 쓰기 가능하게 마운트합니다.
+
+필수 입력은 저장소의 `data/training_dataset.csv`와 `data/dataset_sources.json`입니다. `data/occupancy-detection-dataset/data/intermi/Room_A`·`Room_B`의 `df_occ.csv`와 `df_features.csv`가 있으면 학습 행에 해당하는 영상 인원수·개구부 정보도 사용합니다. 각 방의 두 보조 파일이 모두 있지 않으면 해당 방의 인원수·개구부는 가정으로 대체하고 출처에 기록합니다.
+
+기본값은 seed **20261111**, **3개 방·2026-11-09부터 7일·1분 간격·Asia/Seoul**, **예외 집중 모드**입니다. 결과는 `data/simulated/<생성ID>/`에 저장합니다. 같은 코드·자료·seed·설정이면 CSV와 의미상 메타데이터가 재현되며 같은 생성ID가 이미 있으면 덮어쓰지 않고 실패합니다. 새 결과가 필요하면 seed나 생성 설정을 변경합니다. 출력은 Git에서 제외합니다.
+
+- 방별 `room_01.csv` 등의 열은 기존과 같은 `date,Temperature,Humidity,Light,CO2,Occupancy` 6개뿐입니다. 날짜는 offset을 포함한 ISO 시각이고 센서 단위는 °C, %, lux, ppm입니다.
+- `room_01.metadata.jsonl` 등은 CSV 파일명·0부터 시작하는 행 인덱스·실제 CSV 행번호·고유 ID로 연결합니다. 가상 인원·전등·환기·사건·합성 표시와 방/날짜 그룹은 이 파일에만 있습니다. 모델 입력으로 합치지 마세요.
+- `manifest.json`에는 설정·seed·코드/프로필/보정자료 해시·시간대·실제 사건 건수·분할 권고를 기록합니다. `profile.json`에는 출처별 보정 통계와 추정/가정 구분, `quality.md`·`quality.json`에는 생성 품질의 요약·수치를 기록합니다. `INCOMPLETE`가 있으면 완료되지 않은 결과입니다.
+
+설정은 Compose가 읽는 `.env.example` 기본값과 사용자가 관리하는 `.env`의 `SIM_*` 환경변수로 전달합니다. 생성기 자체는 `.env`를 직접 열지 않습니다. `SIM_MODE=normal`은 일반 생활 패턴과 가정한 드문 사건, `exceptions`는 주말 무인 점등·22시 무인 점등·소등 누락·야간 실제 사용·어두운 재실·강한 환기 중 재실·퇴실 후 CO₂ 잔류를 의도적으로 포함합니다. 강제 비율은 실제 발생률이 아닙니다.
+
+예를 들어 일반 모드로 3개 방의 14일 데이터를 새로 만들려면, 기존 `.env`의 다른 설정은 유지하고 아래 항목만 추가하거나 수정한 뒤 생성 명령을 다시 실행합니다. `.env`가 없으면 위 실행 절의 복사 명령으로 처음 한 번만 만듭니다.
+
+```dotenv
+SIM_MODE=normal
+SIM_SEED=20261112
+SIM_ROOMS=3
+SIM_DAYS=14
+SIM_START_DATE=2026-11-09
+SIM_STEP_SECONDS=60
+SIM_TIMEZONE=Asia/Seoul
+```
+
+명령이 성공하면 마지막 출력의 `passed: true`와 생성 경로를 확인하고 해당 폴더의 `quality.md`를 먼저 읽습니다. 실패 시 남는 `INCOMPLETE` 결과는 학습에 사용하지 마세요. 같은 설정으로 생성된 폴더가 이미 있다면 오류는 덮어쓰기 방지 동작이며, 다른 seed로 새 실험을 만들 수 있습니다.
+
+`SIM_ROOMS`는 1~12, `SIM_DAYS`는 1~31(예외 집중은 7일 이상), `SIM_STEP_SECONDS`는 30/60/300입니다. `SIM_START_DATE`, `SIM_TIMEZONE`, `SIM_SEED`로 달력과 재현성을 정합니다. `SIM_CAPACITY` 기본 8명, `SIM_VOLUME_M3` 기본 90m³, `SIM_LATITUDE` 기본 37.5도는 실제 방에서 식별한 값이 아닌 조정 가능한 가정입니다. 일반 모드의 `SIM_EVENT_PROBABILITY` 기본 0.03은 방·날짜별 가정한 예외 확률입니다.
+
+보정 기준은 **canonical `training_dataset.csv` 한 벌**이며 기존 `test_dataset.csv`와 중복 파생본은 분포 추정에 사용하지 않습니다. `dataset_sources.json` 해시·출처를 검증하고 Graz 보조정보도 학습 출처·시각·센서·영상 정답이 일치하는 부분만 연결합니다. 보조 특징의 `occupancy` 센서는 영상 인원수 정답과 구분합니다. Graz는 UTC에서 Europe/Vienna로 변환하고 legacy는 시간대 미확인 현지 시각으로 분석합니다. 1분/5분 표본 간격을 분당 변화량으로 맞추며 다른 날짜·출처·큰 공백은 차분에서 제외합니다. DST가 있는 생성 시간대도 UTC 경과로 처리합니다.
+
+품질 검사는 실제 내보낸 파일을 다시 읽어 스키마·유한값·범위·시간·정답·사건 일관성을 확인합니다. 분포·증감·자기상관·센서 상관·사용 지속시간 차이를 수치화하고, 타임스탬프를 무시한 센서 행/8시점 윈도우의 동일·근접 복사를 검사합니다. 윈도우 근접 검사는 출처의 원래 표본 간격에 맞춘 15분 간격 표본 진단이며 현실성의 증명은 아닙니다.
+
+향후 합성 학습/평가에는 `manifest.json`의 전체 방 단위 분할 권고를 사용하세요. 같은 날짜·사건·인접 행이 분할을 넘지 않습니다. 방이 3개 미만이면 `train_only`만 제안합니다. 방별 보정 출처가 다르므로 분할에는 출처 차이도 포함됩니다. **현재 생성기는 자동 학습·평가·기존 CSV 병합을 하지 않습니다.** 사무실 관측을 새 방에 옮긴 가정이므로 실제 강의실·대규모 인원·환기량·계절의 현실성이나 모델 성능을 보장하지 않습니다.
+
+```cmd
+docker compose run --rm --no-deps simulator python -m unittest scripts.test_simulate -v
+```
+
 ## 검증과 중지
 
 ```cmd

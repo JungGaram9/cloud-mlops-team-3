@@ -17,6 +17,7 @@
 !scripts/
 !scripts/merge_data.py
 !scripts/runtime_logging.py
+!scripts/simulate.py
 models/weights/.training.lock
 models/weights/.registration.lock
 models/weights/.current.pending.json
