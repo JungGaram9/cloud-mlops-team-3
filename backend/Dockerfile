@@ -13,6 +13,7 @@ COPY data/training_dataset.csv data/test_dataset.csv /app/data/
 COPY data/dataset_sources.json /app/data/
 COPY scripts/merge_data.py /app/scripts/merge_data.py
 COPY scripts/runtime_logging.py /app/scripts/runtime_logging.py
+COPY scripts/simulate.py /app/scripts/simulate.py
 COPY backend/ /app/backend/
 COPY models/ /app/models/
 COPY reports/ /app/reports/

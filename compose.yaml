@@ -9,6 +9,24 @@ x-environment: &environment
     required: false
 
 services:
+  simulator:
+    profiles: [simulation-tools]
+    image: classroom-occupancy-api
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: *environment
+    user: "0:0"
+    command: ["python", "-m", "scripts.simulate"]
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./data:/app/data:ro
+      - ./data/simulated:/app/data/simulated
+    read_only: true
+    tmpfs:
+      - /tmp
+
   trainer:
     image: classroom-occupancy-api
     build:
