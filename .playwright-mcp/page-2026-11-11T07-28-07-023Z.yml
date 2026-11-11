@@ -1,0 +1,65 @@
+- generic [ref=f11e3]:
+  - banner [ref=f11e4]:
+    - link "강의실 지킴이" [ref=f11e5] [cursor=pointer]:
+      - /url: "#"
+    - navigation "서비스 영역" [ref=f11e8]:
+      - button "강의실 현황" [ref=f11e9] [cursor=pointer]
+      - button "모델 관리" [ref=f11e10] [cursor=pointer]
+    - paragraph [ref=f11e11]:
+      - generic [ref=f11e12]: 11월 11일 (수)
+      - time [ref=f11e13]: 16:28
+  - main [ref=f11e14]:
+    - generic [ref=f11e15]:
+      - region "지금 가 볼 방" [ref=f11e16]:
+        - heading "지금 가 볼 방" [level=1] [ref=f11e17]
+        - paragraph [ref=f11e18]: 센서로 추정한 순서입니다. 현장에서 직접 확인해 주세요.
+        - paragraph [ref=f11e19]: 강의실 현황을 불러오는 중입니다.
+        - generic [ref=f11e20]:
+          - generic [ref=f11e21]:
+            - term [ref=f11e22]: 사용 중
+            - definition [ref=f11e23]: "0"
+          - generic [ref=f11e24]:
+            - term [ref=f11e25]: 비어 있음
+            - definition [ref=f11e26]: "0"
+          - generic [ref=f11e27]:
+            - term [ref=f11e28]: 전체
+            - definition [ref=f11e29]: "0"
+        - status [ref=f11e30]: 연결하는 중
+      - region "층별 배치" [ref=f11e31]:
+        - generic [ref=f11e32]:
+          - heading "층별 배치" [level=2] [ref=f11e33]
+          - generic [ref=f11e34]:
+            - group "상태로 강조해서 보기" [ref=f11e35]:
+              - button "전체" [pressed] [ref=f11e36] [cursor=pointer]
+              - button "불 확인 필요 0" [ref=f11e37] [cursor=pointer]:
+                - text: 불 확인 필요
+                - generic [ref=f11e38]: "0"
+              - button "사용 중 0" [ref=f11e39] [cursor=pointer]:
+                - text: 사용 중
+                - generic [ref=f11e40]: "0"
+              - button "비어 있음 0" [ref=f11e41] [cursor=pointer]:
+                - text: 비어 있음
+                - generic [ref=f11e42]: "0"
+              - button "연결·측정 확인 0" [ref=f11e43] [cursor=pointer]:
+                - text: 연결·측정 확인
+                - generic [ref=f11e44]: "0"
+            - searchbox "호실 찾기" [ref=f11e45]
+        - paragraph [ref=f11e46]: 강의실을 불러오는 중입니다.
+        - generic [aria-hidden] [ref=f11e47]:
+          - generic [ref=f11e48]: 불 확인 필요
+          - generic [ref=f11e50]: 사용 중
+          - generic [ref=f11e52]: 비어 있음
+          - generic [ref=f11e54]: 연결·측정 확인
+        - paragraph [ref=f11e56]: ‘불 확인 필요’는 별도 순찰 참고 신호입니다. 사용 여부 추정과 겹칠 수 있고 예약·출입 가능 여부와는 관계없습니다. 배치는 도식이며 실제 건물과 다를 수 있습니다.
+    - region "101호 자세히" [ref=f11e57]:
+      - heading "101호 자세히" [level=2] [ref=f11e59]
+      - paragraph [ref=f11e60]: 상세 정보를 불러오는 중입니다.
+    - group [ref=f11e61]:
+      - generic "시연 관리 시연 상태 확인 중" [ref=f11e62] [cursor=pointer]:
+        - generic [ref=f11e63]: 시연 관리
+        - generic [ref=f11e64]: 시연 상태 확인 중
+      - option "1초에 1분"
+      - option "1초에 5분" [selected]
+      - option "1초에 10분"
+      - option "1초에 20분"
+    - generic [ref=f11e65]: 시연용 강의실 6곳 · AWS EC2 배포 · 자동 소등 기능과 로그인·권한 관리는 없습니다.

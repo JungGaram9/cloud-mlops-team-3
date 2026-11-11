@@ -69,8 +69,10 @@ function Icon({ name, size = 20 }) {
     file: <><path d="M14 3H5v18h14V8Zm0 0v5h5M8 12h8M8 16h6" /></>,
     check: <path d="m5 12 4 4L19 6" />,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
+    moon: <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" />,
   };
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.lab}</svg>;
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.lab}</svg>;
 }
 
 function Switch({ label, checked, onChange, disabled, description }) {
@@ -197,7 +199,7 @@ function ReportPanel({ report, version, loading, onExperiment, onReuse, onActiva
     ['학습 / 검증 / 평가 행', `${primaryModel.training_split.rows.toLocaleString()} / ${primaryModel.validation_split.rows.toLocaleString()} / ${primaryModel.test_data.rows.toLocaleString()}`],
     ['검증 최저 손실', decimal(primaryModel.training.best_validation_loss)],
   ] : [];
-  return <section className="panel report-panel"><div className="section-heading"><div><span className="eyebrow">모델 기록</span><h2>{version || '모델 선택'} 학습 보고서</h2></div><Icon name="file" /></div>
+  return <section className="panel report-panel"><div className="section-heading"><div><h2>{version || '모델 선택'} 학습 보고서</h2></div><Icon name="file" /></div>
     {loading ? <p className="empty">보고서를 불러오는 중입니다.</p> : !report ? <p className="empty">버전을 선택하면 학습 설정과 실제 평가 결과를 볼 수 있습니다.</p> : <>
       {report.legacy && <p className="notice">{report.note}</p>}
       {report.config && <div className="report-title"><h3>{report.config.name}</h3><small>학습 {report.duration_seconds?.toFixed(1)}초 · {date(report.created_at_utc)}</small></div>}
@@ -265,7 +267,7 @@ function Dashboard({ registry, selected, onSelect, job }) {
     </div>
     <section className="panel">
       <div className="section-heading">
-        <div><span className="eyebrow">성능 비교</span><h2>버전마다 달라지는 정확도</h2></div>
+        <div><h2>버전마다 달라지는 정확도</h2></div>
         <div className="chart-legend"><span><i className="dot green" />선택 모델</span><span><i className="dot blue" />조도 제외 비교</span></div>
       </div>
       {groups.map(group => {
@@ -292,7 +294,7 @@ function Dashboard({ registry, selected, onSelect, job }) {
     </section>
     <section className="panel history-panel">
       <div className="section-heading">
-        <div><span className="eyebrow">실험 이력</span><h2>모델 버전</h2></div>
+        <div><h2>모델 버전</h2></div>
         <span className="badge neutral">{totalVersions}개 보존됨</span>
       </div>
       <div className="table-scroll">
@@ -332,7 +334,7 @@ function TrainingForm({ config, options, previewLimits, values, setValues, busy,
       <fieldset disabled={busy || !options}>
         <section className="panel">
           <div className="section-heading">
-            <div><span className="step-label">01 · 실험 설계</span><h2>이름과 데이터</h2></div>
+            <div><h2>1. 이름과 데이터</h2></div>
             <span className="badge neutral">출처별 시간순 분할</span>
           </div>
           <p className="small-note">기존 자료·Room A·Room B 각각의 앞부분을 학습하고 뒷부분을 검증합니다. 출처는 입력 피처에 추가하지 않습니다.</p>
@@ -355,7 +357,7 @@ function TrainingForm({ config, options, previewLimits, values, setValues, busy,
 
         <section className="panel">
           <div className="section-heading">
-            <div><span className="step-label">02 · 피처 선택</span><h2>무엇을 학습할까요?</h2></div>
+            <div><h2>2. 무엇을 학습할까요?</h2></div>
             <span className="badge success">{config.features.length} / 6개 사용</span>
           </div>
           <p className="section-description">스위치는 실제 학습 입력을 바꿉니다. 아래 슬라이더 값은 완료한 모델의 예측 미리보기에 사용하며 CSV 학습값을 바꾸지 않습니다.</p>
@@ -390,7 +392,7 @@ function TrainingForm({ config, options, previewLimits, values, setValues, busy,
 
         <section className="panel">
           <div className="section-heading">
-            <div><span className="step-label">03 · 학습 설정</span><h2>모델의 학습 방식을 조절하세요.</h2></div>
+            <div><h2>3. 모델의 학습 방식을 조절하세요.</h2></div>
             <button type="button" className="text-button" onClick={onReset}>설정 초기화</button>
           </div>
           <div className="control-grid">
@@ -479,7 +481,7 @@ function TrainingMonitor({ job, jobs, cancelling, onCancel, onViewReport, onInsp
     <aside className="training-aside">
       <section className="panel live-panel">
         <div className="section-heading">
-          <div><span className="eyebrow">실시간 학습</span><h2>{job ? STATUS[job.status] : '학습을 기다리고 있어요.'}</h2></div>
+          <div><h2>{job ? STATUS[job.status] : '학습을 기다리고 있어요.'}</h2></div>
           {job && <span className={`badge ${job.status === 'completed' ? 'success' : 'neutral'}`}>{job.version || '새 실험'}</span>}
         </div>
         <p className="job-name">{job?.config.name || '설정을 조정한 뒤 학습을 시작하세요.'}</p>
@@ -503,7 +505,7 @@ function TrainingMonitor({ job, jobs, cancelling, onCancel, onViewReport, onInsp
         <p className="small-note">탭을 바꾸거나 새로고침해도 서버에서 학습은 계속됩니다. 동시에 한 실험을 실행합니다.</p>
       </section>
       <form id="sensor-preview-form" className="panel preview-panel" onSubmit={onPredict}>
-        <div className="section-heading"><div><span className="eyebrow">입력 미리보기</span><h3>{selected || '—'} 예측</h3></div></div>
+        <div className="section-heading"><div><h3>{selected || '—'} 예측</h3></div></div>
         <p className="small-note">피처 카드의 슬라이더 값으로 저장된 모델을 테스트합니다. 아직 학습하지 않은 설정의 예측은 아닙니다.</p>
         <FeatureTags features={primaryModel?.features} />
         {inputError && <p className="inline-error">{inputError} 버전 전환 후 기존 값이 범위 밖이면 값을 수정하세요.</p>}
@@ -858,7 +860,7 @@ function ModelManagement() {
       <div className="workspace">
         <div className="page-heading">
           <div>
-            <span className="eyebrow">강의실 사용 여부 · 모델 실험</span>
+            
             <h1>{tab === 'dashboard' ? '모델을 한눈에, 실험을 차곡차곡.' : tab === 'training' ? '다음 모델을 만들어 보세요.' : '센서로 읽는 강의실.'}</h1>
             <p>{tab === 'dashboard' ? '피처와 학습 설정이 성능에 어떤 차이를 만드는지 비교하세요.' : tab === 'training' ? '피처를 선택하고 학습 설정을 조절하면, 새 모델과 보고서를 함께 기록합니다.' : '저장된 모델을 선택하고 측정값 한 건으로 현재 사용 여부를 확인하세요.'}</p>
           </div>
@@ -899,13 +901,28 @@ function ModelManagement() {
   </div>;
 }
 
+const THEME_KEY = 'classroom-theme';
+
+function ThemeSwitch() {
+  const [theme, setTheme] = useState(() => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+  function choose(next) {
+    setTheme(next);
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem(THEME_KEY, next); } catch { }
+  }
+  return <div className="theme-switch" role="group" aria-label="화면 밝기">
+    {[['light', '라이트', 'sun'], ['dark', '다크', 'moon']].map(([value, label, icon]) =>
+      <button type="button" key={value} aria-pressed={theme === value} aria-label={`${label} 모드`} title={`${label} 모드`} onClick={() => choose(value)}><Icon name={icon} size={16} /><span>{label}</span></button>)}
+  </div>;
+}
+
 function App() {
   const [area, setArea] = useState('classrooms');
   return <div className={`service-shell ${area === 'management' ? 'management-area' : ''}`}>
-    <header className="service-nav"><a href="#" onClick={event => { event.preventDefault(); setArea('classrooms'); }} className="service-brand"><span aria-hidden="true">▥</span>강의실 지킴이</a>
+    <header className="service-nav"><a href="#" onClick={event => { event.preventDefault(); setArea('classrooms'); }} className="service-brand"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 21V5l9-3v19M12 8l9 2v11M3 21h18M7 9v.01M7 13v.01M7 17v.01M16 14v.01M16 18v.01" /></svg>강의실 지킴이</a>
       <nav aria-label="서비스 영역"><button aria-current={area === 'classrooms' ? 'page' : undefined} onClick={() => setArea('classrooms')}>강의실 현황</button>
         <button aria-current={area === 'management' ? 'page' : undefined} onClick={() => setArea('management')}>모델 관리</button></nav>
-      <span className="service-purpose">센서로 확인하는 공간의 현재</span></header>
+      <span className="service-purpose">센서로 확인하는 공간의 현재</span><ThemeSwitch /></header>
     {area === 'classrooms' ? <ClassroomBoard /> : <ModelManagement />}
   </div>;
 }

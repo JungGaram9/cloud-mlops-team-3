@@ -1,0 +1,68 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-11-11T07:29:17.357Z",
+        "reason": "Claude decided: throwaway first-viewport sketch for the direction decision page, not shipped UI"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-split-flap.html"
+        ],
+        "createdAt": "2026-11-11T07:29:17.619Z",
+        "reason": "Claude decided: throwaway first-viewport sketch for the direction decision page, not shipped UI"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/canon.html"
+        ],
+        "createdAt": "2026-11-11T07:29:17.883Z",
+        "reason": "Claude decided: throwaway first-viewport sketch for the direction decision page, not shipped UI"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/model-pick.html"
+        ],
+        "createdAt": "2026-11-11T07:43:35.768Z",
+        "reason": "Claude decided: unchosen direction sketch for the decision page; its font belongs to that alternate world, not shipped UI"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/challenger-split-flap.html"
+        ],
+        "createdAt": "2026-11-11T07:43:36.061Z",
+        "reason": "Claude decided: unchosen direction sketch for the decision page; its font belongs to that alternate world, not shipped UI"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-11-11T08:05:25.321Z",
+        "reason": "Claude decided: Operate-mode dashboard following the user's pinned Supabase-dashboard reference; Inter is the UI workhorse closest to it"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/assigned.html"
+        ],
+        "createdAt": "2026-11-11T08:15:07.660Z",
+        "reason": "Claude decided: leftover sketch from the discarded evacuation-map direction round, not shipped UI"
+      }
+    ]
+  }
+}

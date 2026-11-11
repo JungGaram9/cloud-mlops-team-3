@@ -1,0 +1,1304 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-11T12:00:00Z",
+  "title": "Design System: 강의실 지킴이",
+  "extensions": {
+    "themes": {
+      "default": "dark",
+      "selectors": {
+        "dark": ":root",
+        "light": ":root[data-theme=\"light\"]"
+      },
+      "selection": "index.html 인라인 스크립트가 그리기 전에 localStorage 'classroom-theme'(light|dark)을, 없으면 prefers-color-scheme을 읽어 <html data-theme>을 정한다. 헤더의 테마 스위치가 같은 키에 저장한다.",
+      "tokenNaming": "frontmatter의 'light-' 접두어 색은 같은 이름의 CSS 변수를 밝은 테마에서 덮어쓴 값이다.",
+      "legacyAliases": {
+        "--accent": "--brand-btn",
+        "--accent-dark": "--brand-btn-hover",
+        "--soft": "--surface-3",
+        "--muted": "--fg-muted",
+        "--border": "--line"
+      }
+    },
+    "colorMeta": {
+      "brand": {
+        "role": "primary",
+        "displayName": "신호 녹색",
+        "canonical": "#3ecf8e",
+        "theme": "dark",
+        "cssVar": "--brand",
+        "tonalRamp": [
+          "#103424",
+          "#1c5d40",
+          "#28875c",
+          "#35b079",
+          "#3ecf8e",
+          "#82e0b6",
+          "#bbeed7",
+          "#ecfaf4"
+        ]
+      },
+      "brand-btn": {
+        "role": "primary",
+        "displayName": "버튼 녹색",
+        "canonical": "#006239",
+        "theme": "dark",
+        "cssVar": "--brand-btn",
+        "tonalRamp": [
+          "#00180e",
+          "#002c1a",
+          "#004025",
+          "#005330",
+          "#006239",
+          "#59997e",
+          "#a6c8ba",
+          "#e6efeb"
+        ]
+      },
+      "brand-btn-hover": {
+        "role": "primary",
+        "displayName": "버튼 녹색 hover",
+        "canonical": "#00754a",
+        "theme": "dark",
+        "cssVar": "--brand-btn-hover",
+        "tonalRamp": [
+          "#001d12",
+          "#003521",
+          "#004c30",
+          "#00633f",
+          "#00754a",
+          "#59a589",
+          "#a6cfc0",
+          "#e6f1ed"
+        ]
+      },
+      "brand-line": {
+        "role": "primary",
+        "displayName": "녹색 선",
+        "canonical": "#3ecf8e4d",
+        "theme": "dark",
+        "cssVar": "--brand-line",
+        "tonalRamp": [
+          "#3ecf8e0d",
+          "#3ecf8e14",
+          "#3ecf8e1f",
+          "#3ecf8e33",
+          "#3ecf8e4d",
+          "#3ecf8e80",
+          "#3ecf8eb3",
+          "#3ecf8ee6"
+        ]
+      },
+      "brand-bg": {
+        "role": "primary",
+        "displayName": "녹색 바닥",
+        "canonical": "#12261e",
+        "theme": "dark",
+        "cssVar": "--brand-bg",
+        "tonalRamp": [
+          "#040a08",
+          "#08110e",
+          "#0c1914",
+          "#0f201a",
+          "#12261e",
+          "#65726d",
+          "#acb3b0",
+          "#e7e9e8"
+        ]
+      },
+      "brand-tint": {
+        "role": "primary",
+        "displayName": "녹색 옅은 칠",
+        "canonical": "#3ecf8e1a",
+        "theme": "dark",
+        "cssVar": "--brand-tint",
+        "tonalRamp": [
+          "#3ecf8e0d",
+          "#3ecf8e14",
+          "#3ecf8e1f",
+          "#3ecf8e33",
+          "#3ecf8e4d",
+          "#3ecf8e80",
+          "#3ecf8eb3",
+          "#3ecf8ee6"
+        ]
+      },
+      "warn": {
+        "role": "secondary",
+        "displayName": "확인 주황",
+        "canonical": "#e9a23b",
+        "theme": "dark",
+        "cssVar": "--warn",
+        "tonalRamp": [
+          "#3a280f",
+          "#69491b",
+          "#976926",
+          "#c68a32",
+          "#e9a23b",
+          "#f1c380",
+          "#f7deba",
+          "#fdf6eb"
+        ]
+      },
+      "warn-bg": {
+        "role": "secondary",
+        "displayName": "주황 바닥",
+        "canonical": "#2b2112",
+        "theme": "dark",
+        "cssVar": "--warn-bg",
+        "tonalRamp": [
+          "#0b0804",
+          "#130f08",
+          "#1c150c",
+          "#251c0f",
+          "#2b2112",
+          "#756f65",
+          "#b5b1ac",
+          "#eae9e7"
+        ]
+      },
+      "warn-line": {
+        "role": "secondary",
+        "displayName": "주황 선",
+        "canonical": "#5c4318",
+        "theme": "dark",
+        "cssVar": "--warn-line",
+        "tonalRamp": [
+          "#171106",
+          "#291e0b",
+          "#3c2c10",
+          "#4e3914",
+          "#5c4318",
+          "#958569",
+          "#c6bdae",
+          "#efece8"
+        ]
+      },
+      "warn-tint": {
+        "role": "secondary",
+        "displayName": "주황 옅은 칠",
+        "canonical": "#e9a23b1f",
+        "theme": "dark",
+        "cssVar": "--warn-tint",
+        "tonalRamp": [
+          "#e9a23b0d",
+          "#e9a23b14",
+          "#e9a23b1f",
+          "#e9a23b33",
+          "#e9a23b4d",
+          "#e9a23b80",
+          "#e9a23bb3",
+          "#e9a23be6"
+        ]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "경보 붉은색",
+        "canonical": "#f0705a",
+        "theme": "dark",
+        "cssVar": "--danger",
+        "tonalRamp": [
+          "#3c1c16",
+          "#6c3228",
+          "#9c493a",
+          "#cc5f4c",
+          "#f0705a",
+          "#f5a294",
+          "#facdc5",
+          "#fef1ee"
+        ]
+      },
+      "danger-solid": {
+        "role": "tertiary",
+        "displayName": "경보 점",
+        "canonical": "#e5484d",
+        "theme": "dark",
+        "cssVar": "--danger-solid",
+        "tonalRamp": [
+          "#391213",
+          "#672023",
+          "#952f32",
+          "#c33d41",
+          "#e5484d",
+          "#ee888b",
+          "#f6bfc1",
+          "#fceded"
+        ]
+      },
+      "danger-bg": {
+        "role": "tertiary",
+        "displayName": "붉은 바닥",
+        "canonical": "#2b1614",
+        "theme": "dark",
+        "cssVar": "--danger-bg",
+        "tonalRamp": [
+          "#0b0605",
+          "#130a09",
+          "#1c0e0d",
+          "#251311",
+          "#2b1614",
+          "#756866",
+          "#b5adad",
+          "#eae8e8"
+        ]
+      },
+      "danger-line": {
+        "role": "tertiary",
+        "displayName": "붉은 선",
+        "canonical": "#5c2a22",
+        "theme": "dark",
+        "cssVar": "--danger-line",
+        "tonalRamp": [
+          "#170a08",
+          "#29130f",
+          "#3c1b16",
+          "#4e241d",
+          "#5c2a22",
+          "#95756f",
+          "#c6b4b2",
+          "#efeae9"
+        ]
+      },
+      "danger-tint": {
+        "role": "tertiary",
+        "displayName": "붉은 옅은 칠",
+        "canonical": "#e5484d24",
+        "theme": "dark",
+        "cssVar": "--danger-tint",
+        "tonalRamp": [
+          "#e5484d0d",
+          "#e5484d14",
+          "#e5484d1f",
+          "#e5484d33",
+          "#e5484d4d",
+          "#e5484d80",
+          "#e5484db3",
+          "#e5484de6"
+        ]
+      },
+      "danger-strong": {
+        "role": "tertiary",
+        "displayName": "경보 진한 글자",
+        "canonical": "#ffb4a6",
+        "theme": "dark",
+        "cssVar": "--danger-strong",
+        "tonalRamp": [
+          "#402d2a",
+          "#73514b",
+          "#a6756c",
+          "#d9998d",
+          "#ffb4a6",
+          "#ffcec5",
+          "#ffe5e0",
+          "#fff8f6"
+        ]
+      },
+      "series-blue": {
+        "role": "tertiary",
+        "displayName": "계열 파랑",
+        "canonical": "#5fa8ff",
+        "theme": "dark",
+        "cssVar": "--blue",
+        "tonalRamp": [
+          "#182a40",
+          "#2b4c73",
+          "#3e6da6",
+          "#518fd9",
+          "#5fa8ff",
+          "#97c6ff",
+          "#c7e1ff",
+          "#eff6ff"
+        ]
+      },
+      "series-temp": {
+        "role": "tertiary",
+        "displayName": "계열 온도",
+        "canonical": "#f0705a",
+        "theme": "dark",
+        "cssVar": "--series-temp",
+        "tonalRamp": [
+          "#3c1c16",
+          "#6c3228",
+          "#9c493a",
+          "#cc5f4c",
+          "#f0705a",
+          "#f5a294",
+          "#facdc5",
+          "#fef1ee"
+        ]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "바탕",
+        "canonical": "#171717",
+        "theme": "dark",
+        "cssVar": "--bg",
+        "tonalRamp": [
+          "#060606",
+          "#0a0a0a",
+          "#0f0f0f",
+          "#141414",
+          "#171717",
+          "#686868",
+          "#aeaeae",
+          "#e8e8e8"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "면 1",
+        "canonical": "#1f1f1f",
+        "theme": "dark",
+        "cssVar": "--surface",
+        "tonalRamp": [
+          "#080808",
+          "#0e0e0e",
+          "#141414",
+          "#1a1a1a",
+          "#1f1f1f",
+          "#6d6d6d",
+          "#b1b1b1",
+          "#e9e9e9"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "면 2",
+        "canonical": "#242424",
+        "theme": "dark",
+        "cssVar": "--surface-2",
+        "tonalRamp": [
+          "#090909",
+          "#101010",
+          "#171717",
+          "#1f1f1f",
+          "#242424",
+          "#717171",
+          "#b2b2b2",
+          "#e9e9e9"
+        ]
+      },
+      "surface-3": {
+        "role": "neutral",
+        "displayName": "면 3",
+        "canonical": "#292929",
+        "theme": "dark",
+        "cssVar": "--surface-3",
+        "tonalRamp": [
+          "#0a0a0a",
+          "#121212",
+          "#1b1b1b",
+          "#232323",
+          "#292929",
+          "#747474",
+          "#b4b4b4",
+          "#eaeaea"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "선",
+        "canonical": "#2e2e2e",
+        "theme": "dark",
+        "cssVar": "--line",
+        "tonalRamp": [
+          "#0c0c0c",
+          "#151515",
+          "#1e1e1e",
+          "#272727",
+          "#2e2e2e",
+          "#777777",
+          "#b6b6b6",
+          "#eaeaea"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "진한 선",
+        "canonical": "#3e3e3e",
+        "theme": "dark",
+        "cssVar": "--line-strong",
+        "tonalRamp": [
+          "#101010",
+          "#1c1c1c",
+          "#282828",
+          "#353535",
+          "#3e3e3e",
+          "#828282",
+          "#bbbbbb",
+          "#ececec"
+        ]
+      },
+      "line-hover": {
+        "role": "neutral",
+        "displayName": "hover 선",
+        "canonical": "#4d4d4d",
+        "theme": "dark",
+        "cssVar": "--line-hover",
+        "tonalRamp": [
+          "#131313",
+          "#232323",
+          "#323232",
+          "#414141",
+          "#4d4d4d",
+          "#8b8b8b",
+          "#c1c1c1",
+          "#ededed"
+        ]
+      },
+      "fg": {
+        "role": "neutral",
+        "displayName": "글자",
+        "canonical": "#ededed",
+        "theme": "dark",
+        "cssVar": "--fg",
+        "tonalRamp": [
+          "#3b3b3b",
+          "#6b6b6b",
+          "#9a9a9a",
+          "#c9c9c9",
+          "#ededed",
+          "#f3f3f3",
+          "#f9f9f9",
+          "#fdfdfd"
+        ]
+      },
+      "fg-light": {
+        "role": "neutral",
+        "displayName": "보조 글자",
+        "canonical": "#b4b4b4",
+        "theme": "dark",
+        "cssVar": "--fg-light",
+        "tonalRamp": [
+          "#2d2d2d",
+          "#515151",
+          "#757575",
+          "#999999",
+          "#b4b4b4",
+          "#cecece",
+          "#e5e5e5",
+          "#f8f8f8"
+        ]
+      },
+      "fg-muted": {
+        "role": "neutral",
+        "displayName": "흐린 글자",
+        "canonical": "#898989",
+        "theme": "dark",
+        "cssVar": "--fg-muted",
+        "tonalRamp": [
+          "#222222",
+          "#3e3e3e",
+          "#595959",
+          "#747474",
+          "#898989",
+          "#b2b2b2",
+          "#d6d6d6",
+          "#f3f3f3"
+        ]
+      },
+      "on-brand": {
+        "role": "neutral",
+        "displayName": "버튼 위 글자",
+        "canonical": "#fafafa",
+        "theme": "dark",
+        "cssVar": "--on-brand",
+        "tonalRamp": [
+          "#3e3e3e",
+          "#707070",
+          "#a2a2a2",
+          "#d4d4d4",
+          "#fafafa",
+          "#fcfcfc",
+          "#fdfdfd",
+          "#fefefe"
+        ]
+      },
+      "selection-fg": {
+        "role": "neutral",
+        "displayName": "선택 글자",
+        "canonical": "#0f0f0f",
+        "theme": "dark",
+        "cssVar": "--selection-fg",
+        "tonalRamp": [
+          "#040404",
+          "#070707",
+          "#0a0a0a",
+          "#0d0d0d",
+          "#0f0f0f",
+          "#636363",
+          "#ababab",
+          "#e7e7e7"
+        ]
+      },
+      "light-brand": {
+        "role": "primary",
+        "displayName": "신호 녹색 (밝은 테마)",
+        "canonical": "#007a52",
+        "theme": "light",
+        "cssVar": "--brand",
+        "tonalRamp": [
+          "#001e14",
+          "#003725",
+          "#004f35",
+          "#006846",
+          "#007a52",
+          "#59a98f",
+          "#a6d0c2",
+          "#e6f2ee"
+        ]
+      },
+      "light-brand-btn": {
+        "role": "primary",
+        "displayName": "버튼 녹색 (밝은 테마)",
+        "canonical": "#007a52",
+        "theme": "light",
+        "cssVar": "--brand-btn",
+        "tonalRamp": [
+          "#001e14",
+          "#003725",
+          "#004f35",
+          "#006846",
+          "#007a52",
+          "#59a98f",
+          "#a6d0c2",
+          "#e6f2ee"
+        ]
+      },
+      "light-brand-btn-hover": {
+        "role": "primary",
+        "displayName": "버튼 녹색 hover (밝은 테마)",
+        "canonical": "#006643",
+        "theme": "light",
+        "cssVar": "--brand-btn-hover",
+        "tonalRamp": [
+          "#001a11",
+          "#002e1e",
+          "#00422c",
+          "#005739",
+          "#006643",
+          "#599c85",
+          "#a6c9bd",
+          "#e6f0ec"
+        ]
+      },
+      "light-brand-line": {
+        "role": "primary",
+        "displayName": "녹색 선 (밝은 테마)",
+        "canonical": "#007a5240",
+        "theme": "light",
+        "cssVar": "--brand-line",
+        "tonalRamp": [
+          "#007a520d",
+          "#007a5214",
+          "#007a521f",
+          "#007a5233",
+          "#007a524d",
+          "#007a5280",
+          "#007a52b3",
+          "#007a52e6"
+        ]
+      },
+      "light-brand-bg": {
+        "role": "primary",
+        "displayName": "녹색 바닥 (밝은 테마)",
+        "canonical": "#e7f5ee",
+        "theme": "light",
+        "cssVar": "--brand-bg",
+        "tonalRamp": [
+          "#3a3d3c",
+          "#686e6b",
+          "#969f9b",
+          "#c4d0ca",
+          "#e7f5ee",
+          "#eff8f4",
+          "#f7fcf9",
+          "#fdfefd"
+        ]
+      },
+      "light-brand-tint": {
+        "role": "primary",
+        "displayName": "녹색 옅은 칠 (밝은 테마)",
+        "canonical": "#007a5214",
+        "theme": "light",
+        "cssVar": "--brand-tint",
+        "tonalRamp": [
+          "#007a520d",
+          "#007a5214",
+          "#007a521f",
+          "#007a5233",
+          "#007a524d",
+          "#007a5280",
+          "#007a52b3",
+          "#007a52e6"
+        ]
+      },
+      "light-warn": {
+        "role": "secondary",
+        "displayName": "확인 주황 (밝은 테마)",
+        "canonical": "#9a5b00",
+        "theme": "light",
+        "cssVar": "--warn",
+        "tonalRamp": [
+          "#261700",
+          "#452900",
+          "#643b00",
+          "#834d00",
+          "#9a5b00",
+          "#bd9459",
+          "#dcc6a6",
+          "#f5efe6"
+        ]
+      },
+      "light-warn-bg": {
+        "role": "secondary",
+        "displayName": "주황 바닥 (밝은 테마)",
+        "canonical": "#fff6e6",
+        "theme": "light",
+        "cssVar": "--warn-bg",
+        "tonalRamp": [
+          "#403e3a",
+          "#736f67",
+          "#a6a096",
+          "#d9d1c4",
+          "#fff6e6",
+          "#fff9ef",
+          "#fffcf6",
+          "#fffefc"
+        ]
+      },
+      "light-warn-line": {
+        "role": "secondary",
+        "displayName": "주황 선 (밝은 테마)",
+        "canonical": "#efc98a",
+        "theme": "light",
+        "cssVar": "--warn-line",
+        "tonalRamp": [
+          "#3c3222",
+          "#6c5a3e",
+          "#9b835a",
+          "#cbab75",
+          "#efc98a",
+          "#f5dcb3",
+          "#f9ecd6",
+          "#fdfaf3"
+        ]
+      },
+      "light-warn-tint": {
+        "role": "secondary",
+        "displayName": "주황 옅은 칠 (밝은 테마)",
+        "canonical": "#9a5b0014",
+        "theme": "light",
+        "cssVar": "--warn-tint",
+        "tonalRamp": [
+          "#9a5b000d",
+          "#9a5b0014",
+          "#9a5b001f",
+          "#9a5b0033",
+          "#9a5b004d",
+          "#9a5b0080",
+          "#9a5b00b3",
+          "#9a5b00e6"
+        ]
+      },
+      "light-danger": {
+        "role": "tertiary",
+        "displayName": "경보 붉은색 (밝은 테마)",
+        "canonical": "#c0321f",
+        "theme": "light",
+        "cssVar": "--danger",
+        "tonalRamp": [
+          "#300c08",
+          "#56160e",
+          "#7d2014",
+          "#a32a1a",
+          "#c0321f",
+          "#d67a6d",
+          "#e9b7b1",
+          "#f9eae9"
+        ]
+      },
+      "light-danger-solid": {
+        "role": "tertiary",
+        "displayName": "경보 점 (밝은 테마)",
+        "canonical": "#d93a3a",
+        "theme": "light",
+        "cssVar": "--danger-solid",
+        "tonalRamp": [
+          "#360e0e",
+          "#621a1a",
+          "#8d2626",
+          "#b83131",
+          "#d93a3a",
+          "#e67f7f",
+          "#f2baba",
+          "#fbebeb"
+        ]
+      },
+      "light-danger-bg": {
+        "role": "tertiary",
+        "displayName": "붉은 바닥 (밝은 테마)",
+        "canonical": "#fdefed",
+        "theme": "light",
+        "cssVar": "--danger-bg",
+        "tonalRamp": [
+          "#3f3c3b",
+          "#726c6b",
+          "#a49b9a",
+          "#d7cbc9",
+          "#fdefed",
+          "#fef5f3",
+          "#fef9f9",
+          "#fffdfd"
+        ]
+      },
+      "light-danger-line": {
+        "role": "tertiary",
+        "displayName": "붉은 선 (밝은 테마)",
+        "canonical": "#f1bdb5",
+        "theme": "light",
+        "cssVar": "--danger-line",
+        "tonalRamp": [
+          "#3c2f2d",
+          "#6c5551",
+          "#9d7b76",
+          "#cda19a",
+          "#f1bdb5",
+          "#f6d4cf",
+          "#fae8e5",
+          "#fef8f8"
+        ]
+      },
+      "light-danger-tint": {
+        "role": "tertiary",
+        "displayName": "붉은 옅은 칠 (밝은 테마)",
+        "canonical": "#c0321f14",
+        "theme": "light",
+        "cssVar": "--danger-tint",
+        "tonalRamp": [
+          "#c0321f0d",
+          "#c0321f14",
+          "#c0321f1f",
+          "#c0321f33",
+          "#c0321f4d",
+          "#c0321f80",
+          "#c0321fb3",
+          "#c0321fe6"
+        ]
+      },
+      "light-danger-strong": {
+        "role": "tertiary",
+        "displayName": "경보 진한 글자 (밝은 테마)",
+        "canonical": "#8f2416",
+        "theme": "light",
+        "cssVar": "--danger-strong",
+        "tonalRamp": [
+          "#240906",
+          "#40100a",
+          "#5d170e",
+          "#7a1f13",
+          "#8f2416",
+          "#b67168",
+          "#d8b2ad",
+          "#f4e9e8"
+        ]
+      },
+      "light-series-blue": {
+        "role": "tertiary",
+        "displayName": "계열 파랑 (밝은 테마)",
+        "canonical": "#2563c9",
+        "theme": "light",
+        "cssVar": "--blue",
+        "tonalRamp": [
+          "#091932",
+          "#112d5a",
+          "#184083",
+          "#1f54ab",
+          "#2563c9",
+          "#719adc",
+          "#b3c8ec",
+          "#e9effa"
+        ]
+      },
+      "light-series-temp": {
+        "role": "tertiary",
+        "displayName": "계열 온도 (밝은 테마)",
+        "canonical": "#c0321f",
+        "theme": "light",
+        "cssVar": "--series-temp",
+        "tonalRamp": [
+          "#300c08",
+          "#56160e",
+          "#7d2014",
+          "#a32a1a",
+          "#c0321f",
+          "#d67a6d",
+          "#e9b7b1",
+          "#f9eae9"
+        ]
+      },
+      "light-bg": {
+        "role": "neutral",
+        "displayName": "바탕 (밝은 테마)",
+        "canonical": "#f8f8f8",
+        "theme": "light",
+        "cssVar": "--bg",
+        "tonalRamp": [
+          "#3e3e3e",
+          "#707070",
+          "#a1a1a1",
+          "#d3d3d3",
+          "#f8f8f8",
+          "#fafafa",
+          "#fdfdfd",
+          "#fefefe"
+        ]
+      },
+      "light-surface": {
+        "role": "neutral",
+        "displayName": "면 1 (밝은 테마)",
+        "canonical": "#ffffff",
+        "theme": "light",
+        "cssVar": "--surface",
+        "tonalRamp": [
+          "#404040",
+          "#737373",
+          "#a6a6a6",
+          "#d9d9d9",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff"
+        ]
+      },
+      "light-surface-2": {
+        "role": "neutral",
+        "displayName": "면 2 (밝은 테마)",
+        "canonical": "#f3f3f3",
+        "theme": "light",
+        "cssVar": "--surface-2",
+        "tonalRamp": [
+          "#3d3d3d",
+          "#6d6d6d",
+          "#9e9e9e",
+          "#cfcfcf",
+          "#f3f3f3",
+          "#f7f7f7",
+          "#fbfbfb",
+          "#fefefe"
+        ]
+      },
+      "light-surface-3": {
+        "role": "neutral",
+        "displayName": "면 3 (밝은 테마)",
+        "canonical": "#ebebeb",
+        "theme": "light",
+        "cssVar": "--surface-3",
+        "tonalRamp": [
+          "#3b3b3b",
+          "#6a6a6a",
+          "#999999",
+          "#c8c8c8",
+          "#ebebeb",
+          "#f2f2f2",
+          "#f8f8f8",
+          "#fdfdfd"
+        ]
+      },
+      "light-line": {
+        "role": "neutral",
+        "displayName": "선 (밝은 테마)",
+        "canonical": "#e0e0e0",
+        "theme": "light",
+        "cssVar": "--line",
+        "tonalRamp": [
+          "#383838",
+          "#656565",
+          "#929292",
+          "#bebebe",
+          "#e0e0e0",
+          "#ebebeb",
+          "#f4f4f4",
+          "#fcfcfc"
+        ]
+      },
+      "light-line-strong": {
+        "role": "neutral",
+        "displayName": "진한 선 (밝은 테마)",
+        "canonical": "#cdcdcd",
+        "theme": "light",
+        "cssVar": "--line-strong",
+        "tonalRamp": [
+          "#333333",
+          "#5c5c5c",
+          "#858585",
+          "#aeaeae",
+          "#cdcdcd",
+          "#dedede",
+          "#eeeeee",
+          "#fafafa"
+        ]
+      },
+      "light-line-hover": {
+        "role": "neutral",
+        "displayName": "hover 선 (밝은 테마)",
+        "canonical": "#a8a8a8",
+        "theme": "light",
+        "cssVar": "--line-hover",
+        "tonalRamp": [
+          "#2a2a2a",
+          "#4c4c4c",
+          "#6d6d6d",
+          "#8f8f8f",
+          "#a8a8a8",
+          "#c6c6c6",
+          "#e1e1e1",
+          "#f6f6f6"
+        ]
+      },
+      "light-fg": {
+        "role": "neutral",
+        "displayName": "글자 (밝은 테마)",
+        "canonical": "#171717",
+        "theme": "light",
+        "cssVar": "--fg",
+        "tonalRamp": [
+          "#060606",
+          "#0a0a0a",
+          "#0f0f0f",
+          "#141414",
+          "#171717",
+          "#686868",
+          "#aeaeae",
+          "#e8e8e8"
+        ]
+      },
+      "light-fg-light": {
+        "role": "neutral",
+        "displayName": "보조 글자 (밝은 테마)",
+        "canonical": "#474747",
+        "theme": "light",
+        "cssVar": "--fg-light",
+        "tonalRamp": [
+          "#121212",
+          "#202020",
+          "#2e2e2e",
+          "#3c3c3c",
+          "#474747",
+          "#878787",
+          "#bfbfbf",
+          "#ededed"
+        ]
+      },
+      "light-fg-muted": {
+        "role": "neutral",
+        "displayName": "흐린 글자 (밝은 테마)",
+        "canonical": "#636363",
+        "theme": "light",
+        "cssVar": "--fg-muted",
+        "tonalRamp": [
+          "#191919",
+          "#2d2d2d",
+          "#404040",
+          "#545454",
+          "#636363",
+          "#9a9a9a",
+          "#c8c8c8",
+          "#efefef"
+        ]
+      },
+      "light-on-brand": {
+        "role": "neutral",
+        "displayName": "버튼 위 글자 (밝은 테마)",
+        "canonical": "#ffffff",
+        "theme": "light",
+        "cssVar": "--on-brand",
+        "tonalRamp": [
+          "#404040",
+          "#737373",
+          "#a6a6a6",
+          "#d9d9d9",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff"
+        ]
+      },
+      "light-selection-fg": {
+        "role": "neutral",
+        "displayName": "선택 글자 (밝은 테마)",
+        "canonical": "#ffffff",
+        "theme": "light",
+        "cssVar": "--selection-fg",
+        "tonalRamp": [
+          "#404040",
+          "#737373",
+          "#a6a6a6",
+          "#d9d9d9",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "상세 패널의 사용 확률."
+      },
+      "stat-number": {
+        "displayName": "Stat number",
+        "purpose": "요약 카드의 개수. 1500px 이하 30px, 560px 이하 22px."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "화면 제목. 560px 이하에서 23px."
+      },
+      "room-name": {
+        "displayName": "Room name",
+        "purpose": "카드의 강의실 이름. 상세 패널 제목은 22px."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "구역 제목(강의실), 상세 패널의 사유 문장."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "본문, 카드 설명, 사이드바 항목, 입력값. 안내문은 최대 90ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "배지, 버튼, 묶음 제목, 칸 제목."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "단위, 추이 축, 범례 설명. 모니터링 화면의 최소 크기."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "접힌 측정 기록 안의 식별값."
+      }
+    },
+    "shadows": [
+      {
+        "name": "selection-ring",
+        "value": "0 0 0 1px var(--select)",
+        "purpose": "선택된 요약 카드와 강의실 카드. --select는 --fg. 불 확인은 --warn, 점검 필요는 --danger 고리."
+      },
+      {
+        "name": "input-focus-ring",
+        "value": "0 0 0 2px var(--brand-line)",
+        "purpose": "찾기 입력에 포커스가 들어갔을 때."
+      },
+      {
+        "name": "tab-underline",
+        "value": "inset 0 -2px 0 var(--brand)",
+        "purpose": "상단 바의 현재 탭."
+      },
+      {
+        "name": "popover",
+        "value": "0 8px 24px #00000040",
+        "purpose": "시연 설정 팝오버 한 곳. 내용을 가리며 떠 있는 층에만 쓴다."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-transition",
+        "value": ".15s",
+        "purpose": "hover와 선택 시 배경·테두리·글자색 전환, 펼침 화살표 회전."
+      },
+      {
+        "name": "bar-transition",
+        "value": "transform .3s",
+        "purpose": "사용 확률 막대의 길이 변화."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "transition: none",
+        "purpose": "prefers-reduced-motion: reduce에서 모든 전환을 끈다."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "1500px"
+      },
+      {
+        "name": "desktop",
+        "value": "1280px"
+      },
+      {
+        "name": "tablet",
+        "value": "900px"
+      },
+      {
+        "name": "mobile",
+        "value": "560px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "주 버튼",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "화면마다 주 동작 하나(시연 재생·일시정지)에만 쓰는 녹색 버튼.",
+      "html": "<button class=\"ds-btn-primary\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M8 5l11 7-11 7V5z\"/></svg>재생</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 12px; border: 1px solid var(--brand-line); border-radius: 6px; background: var(--brand-btn); color: var(--on-brand); font: 500 14px Inter, 'Noto Sans KR', sans-serif; cursor: pointer; transition: background .15s, border-color .15s; } .ds-btn-primary:hover { background: var(--brand-btn-hover); border-color: var(--brand); } .ds-btn-primary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }"
+    },
+    {
+      "name": "보조 버튼",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "필터 초기화, 강의실 목록으로, 데이터 전환 등 나머지 모든 버튼.",
+      "html": "<button class=\"ds-btn-secondary\">강의실 목록으로</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-2); color: var(--fg); font: 500 14px Inter, 'Noto Sans KR', sans-serif; cursor: pointer; transition: background .15s, border-color .15s; } .ds-btn-secondary:hover { background: var(--surface-3); border-color: var(--line-hover); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }"
+    },
+    {
+      "name": "테마 스위치",
+      "kind": "custom",
+      "refersTo": "theme-switch",
+      "description": "상단 바 오른쪽 끝의 라이트 | 다크 두 칸 분할 버튼.",
+      "html": "<div class=\"ds-theme\" role=\"group\" aria-label=\"화면 밝기\"><button aria-pressed=\"false\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4\"/></svg><span>라이트</span></button><button aria-pressed=\"true\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z\"/></svg><span>다크</span></button></div>",
+      "css": ".ds-theme { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); } .ds-theme button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); font: 500 14px Inter, 'Noto Sans KR', sans-serif; cursor: pointer; transition: background .15s, color .15s; } .ds-theme button:hover { color: var(--fg); } .ds-theme button[aria-pressed=true] { background: var(--surface-3); color: var(--fg); } .ds-theme button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }"
+    },
+    {
+      "name": "찾기 입력",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "사이드바의 강의실 찾기. 돋보기 아이콘이 앞에 붙는다.",
+      "html": "<label class=\"ds-input-search\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4\"/></svg><input type=\"search\" placeholder=\"이름 또는 호수\" aria-label=\"강의실 찾기\"></label>",
+      "css": ".ds-input-search { display: flex; align-items: center; gap: 8px; width: 232px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--fg-muted); } .ds-input-search:focus-within { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-line); } .ds-input-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font: 400 15px Inter, 'Noto Sans KR', sans-serif; padding: 9px 0; outline: none; } .ds-input-search input::placeholder { color: var(--fg-muted); }"
+    },
+    {
+      "name": "상단 바 탭",
+      "kind": "nav",
+      "refersTo": "nav-tab",
+      "description": "56px 상단 바의 영역 탭. 현재 탭은 아래 2px 녹색 밑줄.",
+      "html": "<nav class=\"ds-nav\"><button class=\"ds-nav-tab\" aria-current=\"page\">강의실 현황</button><button class=\"ds-nav-tab\">모델 관리</button></nav>",
+      "css": ".ds-nav { display: flex; gap: 4px; height: 56px; padding: 0 20px; background: var(--bg); border-bottom: 1px solid var(--line); } .ds-nav-tab { padding: 0 12px; border: 0; background: transparent; color: var(--fg-muted); font: 500 15px Inter, 'Noto Sans KR', sans-serif; box-shadow: inset 0 -2px 0 transparent; cursor: pointer; transition: color .15s, box-shadow .15s; } .ds-nav-tab:hover { color: var(--fg); } .ds-nav-tab[aria-current=page] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--brand); } .ds-nav-tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }"
+    },
+    {
+      "name": "상태 배지",
+      "kind": "chip",
+      "refersTo": "badge-status",
+      "description": "강의실 상태를 색, 글자, 아이콘으로 함께 표시하는 알약형 배지. 점검 필요는 사유 이름을 쓴다.",
+      "html": "<span class=\"ds-badge ds-badge-light\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z\"/></svg>불 확인 필요</span> <span class=\"ds-badge ds-badge-occupied\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z\"/></svg>사용 중 예상</span> <span class=\"ds-badge\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z\"/></svg>비어 있음 예상</span> <span class=\"ds-badge ds-badge-attention\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 4 3 20h18L12 4zM12 10v4M12 17h.01\"/></svg>수신 지연</span> <span class=\"ds-badge ds-badge-waiting\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9\"/></svg>수신 대기</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface-2); color: var(--fg-light); padding: 3px 11px; font: 500 14px/1.5 Inter, 'Noto Sans KR', sans-serif; white-space: nowrap; } .ds-badge-occupied { background: var(--brand-tint); border-color: var(--brand-line); color: var(--brand); } .ds-badge-light { background: var(--warn-tint); border-color: var(--warn-line); color: var(--warn); } .ds-badge-attention { background: var(--danger-tint); border-color: var(--danger-line); color: var(--danger); } .ds-badge-waiting { background: transparent; border-style: dashed; border-color: var(--danger-line); color: var(--danger); }"
+    },
+    {
+      "name": "요약 카드 묶음",
+      "kind": "card",
+      "refersTo": "stat-card",
+      "description": "가 볼 방 / 사용 현황 두 묶음으로 나뉜 상태별 개수 카드이자 필터 버튼. 선택은 글자색 고리.",
+      "html": "<div class=\"ds-stat-groups\"><div><h2>가 볼 방</h2><div class=\"ds-stat-row\"><button class=\"ds-stat ds-stat-light zero\" aria-pressed=\"false\"><span>불 확인 필요</span><strong>0<small>개</small></strong></button><button class=\"ds-stat ds-stat-attention\" aria-pressed=\"false\"><span>점검 필요</span><strong>2<small>개</small></strong></button></div></div><div><h2>사용 현황</h2><div class=\"ds-stat-row\"><button class=\"ds-stat\" aria-pressed=\"true\"><span>전체 강의실</span><strong>6<small>개</small></strong></button><button class=\"ds-stat ds-stat-occupied\" aria-pressed=\"false\"><span>사용 중 예상</span><strong>2<small>개</small></strong></button></div></div></div>",
+      "css": ".ds-stat-groups { display: grid; grid-template-columns: 2fr 2fr; gap: 24px; font-family: Inter, 'Noto Sans KR', sans-serif; } .ds-stat-groups h2 { margin: 0 0 8px; font-size: 14px; font-weight: 500; color: var(--fg-muted); } .ds-stat-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; } .ds-stat { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); text-align: left; font-family: inherit; cursor: pointer; transition: border-color .15s, background .15s; } .ds-stat:hover { border-color: var(--line-hover); } .ds-stat[aria-pressed=true] { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); } .ds-stat > span { font-size: 15px; color: var(--fg-light); } .ds-stat strong { font-size: 34px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; } .ds-stat small { font-size: 15px; font-weight: 400; margin-left: 5px; color: var(--fg-muted); } .ds-stat-light:not(.zero) { border-color: var(--warn-line); background: var(--warn-bg); } .ds-stat-light:not(.zero) strong, .ds-stat-light:not(.zero) > span { color: var(--warn); } .ds-stat-attention:not(.zero) { border-color: var(--danger-line); background: var(--danger-bg); } .ds-stat-attention:not(.zero) strong, .ds-stat-attention:not(.zero) > span { color: var(--danger); } .ds-stat-occupied strong { color: var(--brand); } .ds-stat:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }"
+    },
+    {
+      "name": "강의실 카드",
+      "kind": "card",
+      "refersTo": "room-card",
+      "description": "강의실 하나의 상태, 예측, 센서 4종을 담는 선택 가능한 카드.",
+      "html": "<button class=\"ds-room\"><span class=\"ds-room-top\">1층 · 가상 센서</span><span class=\"ds-room-title\"><strong>101호</strong><span class=\"ds-room-badge\">사용 중 예상</span></span><span class=\"ds-room-action\">수업 중으로 보입니다.</span><span class=\"ds-room-sensors\"><span><small>밝기</small><b>420<i>lux</i></b></span><span><small>CO₂</small><b>910<i>ppm</i></b></span><span><small>온도</small><b>22.4<i>°C</i></b></span><span><small>습도</small><b>41<i>%</i></b></span></span><span class=\"ds-room-bottom\">마지막 수신 14:02</span></button>",
+      "css": ".ds-room { width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); text-align: left; font-family: Inter, 'Noto Sans KR', sans-serif; cursor: pointer; transition: border-color .15s, background .15s; } .ds-room:hover { border-color: var(--line-hover); } .ds-room:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; } .ds-room-top, .ds-room-bottom { font-size: 14px; color: var(--fg-muted); font-variant-numeric: tabular-nums; } .ds-room-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; } .ds-room-title strong { font-size: 24px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; } .ds-room-badge { border: 1px solid var(--brand-line); border-radius: 999px; background: var(--brand-tint); color: var(--brand); padding: 3px 11px; font-size: 14px; font-weight: 500; line-height: 1.5; white-space: nowrap; } .ds-room-action { font-size: 15px; color: var(--fg-light); } .ds-room-sensors { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--line); } .ds-room-sensors > span { display: grid; gap: 2px; padding: 9px 12px; background: var(--bg); } .ds-room-sensors small { font-size: 13px; color: var(--fg-muted); } .ds-room-sensors b { font-size: 19px; font-weight: 500; font-variant-numeric: tabular-nums; } .ds-room-sensors i { font-style: normal; font-size: 13px; font-weight: 400; color: var(--fg-muted); margin-left: 4px; }"
+    },
+    {
+      "name": "상세 패널",
+      "kind": "custom",
+      "refersTo": "detail-panel",
+      "description": "안쪽 카드 없이 1px 구분선으로 구획을 나누고, 불 확인·점검 사유는 꽉 찬 띠로 칠하는 한 장짜리 패널.",
+      "html": "<aside class=\"ds-detail\"><header><h2>101호</h2><p>가상 센서 · 마지막 수신 17:41</p></header><section class=\"ds-band\"><h3>불 확인 참고 신호</h3><p class=\"ds-band-msg\">밝은데 사람 흔적이 없는 상태가 이어집니다.</p></section><section class=\"ds-predict\"><div><h3>사용 중일 확률</h3><strong>91%</strong></div><div class=\"ds-predict-bar\"><i style=\"width:91%\"></i></div></section><details><summary>판단 기준과 한계</summary></details></aside>",
+      "css": ".ds-detail { width: 420px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); font-family: Inter, 'Noto Sans KR', sans-serif; } .ds-detail header { padding-bottom: 16px; } .ds-detail h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.01em; } .ds-detail header p { margin: 2px 0 0; font-size: 14px; color: var(--fg-muted); font-variant-numeric: tabular-nums; } .ds-detail h3 { margin: 0; font-size: 14px; font-weight: 500; color: var(--fg-muted); } .ds-detail > section, .ds-detail > details { border-top: 1px solid var(--line); padding: 16px 0; } .ds-band { margin: 0 -20px; padding: 16px 20px !important; background: var(--warn-bg); border-top-color: var(--warn-line) !important; border-bottom: 1px solid var(--warn-line); } .ds-band-msg { margin: 10px 0 0; font-size: 18px; font-weight: 600; line-height: 1.5; } .ds-predict > div:first-child { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; } .ds-predict strong { font-size: 34px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; color: var(--brand); } .ds-predict-bar { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; } .ds-predict-bar i { display: block; height: 100%; border-radius: 999px; background: var(--brand); } .ds-detail summary { cursor: pointer; font-size: 14px; font-weight: 500; color: var(--fg-light); }"
+    },
+    {
+      "name": "시연 줄",
+      "kind": "custom",
+      "refersTo": "sim-inline",
+      "description": "제목 줄에 붙는 시연 제어: 꼬리표, 가상 시계, 재생 버튼, 시연 설정 펼침.",
+      "html": "<div class=\"ds-sim\"><span class=\"ds-sim-tag\">시연 4곳</span><span class=\"ds-sim-time\"><small>시연 시각</small><strong>16:45</strong></span><button class=\"ds-sim-primary\">일시정지</button><span class=\"ds-sim-more\">시연 설정</span></div>",
+      "css": ".ds-sim { display: inline-flex; align-items: center; gap: 10px; padding: 4px 4px 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); font-family: Inter, 'Noto Sans KR', sans-serif; } .ds-sim-tag { font-size: 14px; font-weight: 500; color: var(--fg-light); } .ds-sim-time { display: inline-flex; align-items: baseline; gap: 6px; } .ds-sim-time small { font-size: 13px; color: var(--fg-muted); } .ds-sim-time strong { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; } .ds-sim-primary { min-height: 36px; padding: 0 12px; border: 1px solid var(--brand-line); border-radius: 6px; background: var(--brand-btn); color: var(--on-brand); font: 500 14px inherit; cursor: pointer; } .ds-sim-primary:hover { background: var(--brand-btn-hover); border-color: var(--brand); } .ds-sim-more { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 6px; font-size: 14px; color: var(--fg-light); cursor: pointer; } .ds-sim-more:hover { background: var(--surface-3); color: var(--fg); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "밤 근무 관제판",
+    "overview": "Supabase 대시보드를 참고한 대시보드 체계이고, 어두운 테마와 밝은 테마 두 가지로 나간다. 어두운 테마가 기본 정의(`:root`)이고, 밝은 테마는 `:root[data-theme=\"light\"]`가 모든 색 토큰을 같은 이름으로 덮어쓴다. 페이지가 그려지기 전에 `index.html`의 인라인 스크립트가 테마를 정한다. 저장된 선택(`localStorage`의 `classroom-theme`)이 있으면 그것을, 없으면 운영체제의 `prefers-color-scheme`을 따른다. 어느 테마든 면은 한 단계씩만 밝기가 달라지고, 모든 구획은 1px 선으로 나뉜다. 색은 상태를 말할 때만 쓴다. 녹색은 사용 중, 주황은 불 확인 필요, 붉은색은 점검 필요다.\n\n40~50대 관리인이 1~2m 떨어져서 읽고, 조교는 같은 화면에서 센서 값과 예측 근거까지 본다. 그래서 글자와 숫자는 일반 대시보드보다 크고(본문 15px, 방 이름 24px, 요약 숫자 34px, 사용 확률 34px), 구조는 상단 바, 왼쪽 사이드바, 두 묶음의 요약 카드, 카드 격자, 오른쪽 상세 패널로 촘촘하게 짠다.\n\n모니터링 화면(\"강의실 현황\")이 이 체계의 기준이고, 모델 관리 영역은 같은 색 토큰과 모서리 값을 따르되 자기 사이드바와 상단 줄을 유지한다. 두 영역 모두 색은 토큰으로만 참조하므로 테마 전환이 화면 전체에 한 번에 적용된다.",
+    "keyCharacteristics": [
+      "어두운 테마와 밝은 테마. 같은 토큰 이름을 테마별 값으로 덮어쓴다.",
+      "바탕 위에 면 3단계, 구획은 1px 선.",
+      "색은 상태 전용. 녹색·주황·붉은색이 각각 한 가지 뜻만 가진다. 선택은 색이 아니라 글자색 고리다.",
+      "그림자 없음. 선택은 1px 고리로만 표시한다(떠 있는 시연 설정 팝오버만 예외).",
+      "모서리는 조작 요소 6px, 패널 8px, 배지 999px 세 가지.",
+      "숫자는 모두 고정폭(`tabular-nums`)이라 1초 갱신에도 자리가 흔들리지 않는다.",
+      "상태는 색, 글자, 아이콘(그리고 테두리 모양) 세 가지 이상으로 함께 구분된다."
+    ],
+    "rules": [
+      {
+        "name": "상태색 전용 규칙",
+        "body": "녹색·주황·붉은색은 상태를 말할 때만 쓴다. 장식, 구분, 강조, 선택 표시 목적으로 색을 칠하지 않는다. 녹색은 \"사용 중\", 연결 표시 알약, 주 버튼에만 남긴다.",
+        "section": "colors"
+      },
+      {
+        "name": "옅은 바닥 규칙",
+        "body": "상태색을 넓은 면에 채울 때는 원색이 아니라 전용 바닥색(`warn-bg`, `danger-bg`)이나 옅은 칠(`brand-tint`, `warn-tint`, `danger-tint`)을 쓰고, 같은 계열의 선(`brand-line`, `warn-line`, `danger-line`)으로 테두리를 두른다.",
+        "section": "colors"
+      },
+      {
+        "name": "토큰 전용 규칙",
+        "body": "색은 언제나 `var(--토큰)`으로 참조한다. 값을 직접 적으면 밝은 테마에서 그 자리만 어두운 값으로 남는다.",
+        "section": "colors"
+      },
+      {
+        "name": "고정폭 숫자 규칙",
+        "body": "갱신되는 숫자(개수, 확률, 센서 값, 시각)는 모두 `font-variant-numeric: tabular-nums`를 쓴다.",
+        "section": "typography"
+      },
+      {
+        "name": "굵기 세 단계 규칙",
+        "body": "400, 500, 600만 쓴다. 숫자는 500, 이름과 제목은 600.",
+        "section": "typography"
+      },
+      {
+        "name": "한글 줄바꿈 규칙",
+        "body": "모니터링 화면 전체에 `word-break: keep-all`을 걸어 단어 중간에서 줄이 바뀌지 않게 한다.",
+        "section": "typography"
+      },
+      {
+        "name": "시각 표기 규칙",
+        "body": "실제 수신 시각은 한국 시간 24시간제 `HH:MM`(초 없음)으로 쓴다. 시연 시각은 가상 하루의 시계이므로 시간대를 붙이지 않는다.",
+        "section": "typography"
+      },
+      {
+        "name": "고리만 허용 규칙",
+        "body": "`box-shadow`는 번짐 없는 고리와 밑줄로만 쓴다. 번지는 그림자는 실제로 위에 떠서 내용을 가리는 팝오버에만 허용하고, 카드와 패널은 띄우지 않는다. 흐림 효과는 없다.",
+        "section": "elevation"
+      },
+      {
+        "name": "선택은 글자색 규칙",
+        "body": "일반 선택 고리는 상태색이 아니라 글자색(`--select` = `fg`)이다. 녹색 고리는 \"사용 중\"과 헷갈리므로 쓰지 않는다.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do 색 값은 `:root`의 토큰(`--bg`, `--surface`, `--line`, `--brand` 등)으로 참조하고, 새 토큰을 만들면 `:root[data-theme=\"light\"]`에도 같은 이름으로 값을 둔다.",
+      "Do 두 테마에서 모두 확인한다. 밝은 테마의 상태색 글자는 흰 바탕에서 읽혀야 한다.",
+      "Do 상태는 색, 글자, 아이콘 세 가지로 함께 표시한다. 범례 점도 채움, 빈 원, 점선 원으로 모양을 달리한다.",
+      "Do 갱신되는 숫자에는 `tabular-nums`를 쓴다.",
+      "Do 모서리는 6px(조작 요소), 8px(패널), 999px(배지) 중에서 고른다.",
+      "Do 선택은 테두리 색과 1px `--select` 고리로, hover는 테두리를 `line-hover`로 진하게 하는 것으로 표시한다.",
+      "Do 모니터링 화면의 글자는 본문 15px, 보조 13px 이상으로 유지한다.",
+      "Do 흐린 글자(`fg-muted`)는 `bg`와 `surface` 위에서 쓰고, 더 밝은 면 위에서는 `fg-light`를 쓴다.",
+      "Do 아이콘은 인라인 SVG 선 아이콘(24px 격자, 선 굵기 1.75)으로 그린다."
+    ],
+    "donts": [
+      "Don't 색 값을 직접 적지 않는다. 직접 적은 값은 테마가 바뀌어도 따라가지 않는다.",
+      "Don't 번지는 그림자나 흐림 효과로 카드와 패널의 깊이를 만들지 않는다. `box-shadow`는 고리와 밑줄, 떠 있는 팝오버만.",
+      "Don't 녹색·주황·붉은색을 장식, 구분, 선택 표시에 쓰지 않는다.",
+      "Don't 상태색 원색을 넓은 면에 채우지 않는다. 전용 바닥색이나 옅은 칠을 쓴다.",
+      "Don't 상세 패널 안에 카드를 다시 겹치지 않는다. 구획은 1px 구분선으로 나눈다.",
+      "Don't \"확인 중\"을 연결·수신 문제에 쓰지 않는다. 그 경우는 점검 필요의 사유 이름을 쓴다.",
+      "Don't 굵기 700 이상을 쓰지 않는다.",
+      "Don't Source Code Pro를 측정 식별값 외의 글자에 쓰지 않는다.",
+      "Don't Supabase의 이름이나 로고를 화면에 쓰지 않는다. 참고한 것은 문법이지 브랜드가 아니다."
+    ]
+  }
+}

@@ -1,0 +1,340 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "강의실 지킴이" [ref=e5] [cursor=pointer]:
+      - /url: "#"
+    - navigation "서비스 영역" [ref=e8]:
+      - button "강의실 현황" [ref=e9] [cursor=pointer]
+      - button "모델 관리" [ref=e10] [cursor=pointer]
+    - generic [ref=e11]: 센서로 확인하는 공간의 현재
+    - group "화면 밝기" [ref=e12]:
+      - button "라이트 모드" [ref=e13] [cursor=pointer]:
+        - generic [ref=e17]: 라이트
+      - button "다크 모드" [pressed] [ref=e18] [cursor=pointer]:
+        - generic [ref=e21]: 다크
+  - generic [ref=e22]:
+    - complementary "보기 설정" [ref=e23]:
+      - generic [ref=e24]:
+        - heading "층" [level=2] [ref=e25]
+        - button "전체 층 6" [pressed] [ref=e26] [cursor=pointer]:
+          - generic [ref=e27]: 전체 층
+          - generic [ref=e28]: "6"
+        - button "1층 3" [ref=e29] [cursor=pointer]:
+          - generic [ref=e30]: 1층
+          - generic [ref=e31]: "3"
+        - button "2층 3" [ref=e32] [cursor=pointer]:
+          - generic [ref=e33]: 2층
+          - generic [ref=e34]: "3"
+      - generic [ref=e35]:
+        - heading "강의실 찾기" [level=2] [ref=e36]
+        - searchbox "강의실 찾기" [ref=e40]
+      - generic [ref=e41]:
+        - heading "전체 센서 평균" [level=2] [ref=e42]
+        - generic [ref=e43]:
+          - generic [ref=e44]:
+            - term [ref=e45]: 실내 밝기
+            - definition [ref=e48]: 221 lux
+          - generic [ref=e49]:
+            - term [ref=e50]: 이산화탄소
+            - definition [ref=e53]: 646 ppm
+          - generic [ref=e54]:
+            - term [ref=e55]: 실내 온도
+            - definition [ref=e58]: 21.4 °C
+          - generic [ref=e59]:
+            - term [ref=e60]: 습도
+            - definition [ref=e63]: 26 %
+      - generic [ref=e64]:
+        - heading "상태 안내" [level=2] [ref=e65]
+        - list [ref=e66]:
+          - listitem [ref=e67]:
+            - generic [ref=e69]:
+              - generic [ref=e70]: 불 확인 필요
+              - generic [ref=e71]: 밝은데 사람 흔적이 없는 상태가 이어짐
+          - listitem [ref=e72]:
+            - generic [ref=e74]:
+              - generic [ref=e75]: 사용 중 예상
+              - generic [ref=e76]: 모델이 사람이 있다고 예측
+          - listitem [ref=e77]:
+            - generic [ref=e79]:
+              - generic [ref=e80]: 비어 있음 예상
+              - generic [ref=e81]: 모델이 빈 방으로 예측
+          - listitem [ref=e82]:
+            - generic [ref=e84]:
+              - generic [ref=e85]: 확인 중
+              - generic [ref=e86]: 밝기·CO₂ 조건이 이어지는지 지켜보는 중
+          - listitem [ref=e87]:
+            - generic [ref=e89]:
+              - generic [ref=e90]: 점검 필요
+              - generic [ref=e91]: 수신 끊김·측정 시각 이상·판별 불가, 그리고 아직 측정이 없는 수신 대기
+      - paragraph [ref=e92]: 시연 4개 · 실센서 2개수신 후 60초가 지나면 연결 확인을 우선합니다.
+    - main [ref=e93]:
+      - generic [ref=e94]:
+        - generic [ref=e95]:
+          - heading "강의실 현황" [level=1] [ref=e96]
+          - paragraph [ref=e97]: 불을 확인할 강의실을 먼저 보세요. 밝기·이산화탄소·온도·습도와 시간대로 사용 여부를 예측합니다.
+        - status [ref=e98]: 연결됨 · 1초마다 갱신
+      - region "시연 제어" [ref=e100]:
+        - generic [ref=e101]: 시연 모드 · 가상 센서 데이터
+        - generic [ref=e102]:
+          - generic [ref=e103]: 공유 시연 시각 · UTC
+          - strong [ref=e104]: 14:56
+          - generic [ref=e105]: 05:00~24:00
+        - generic [ref=e106]:
+          - button "일시정지" [ref=e107] [cursor=pointer]
+          - button "처음부터" [ref=e110] [cursor=pointer]
+          - generic [ref=e113]:
+            - text: 속도
+            - combobox "시연 속도" [ref=e114]:
+              - option "1초 = 1분" [selected]
+              - option "1초 = 5분"
+              - option "1초 = 10분"
+              - option "1초 = 20분"
+        - group [ref=e115]:
+          - generic "시연 안내" [ref=e116] [cursor=pointer]
+      - region "강의실 요약" [ref=e117]:
+        - button [pressed] [ref=e118] [cursor=pointer]:
+          - generic [ref=e119]: 전체 강의실
+          - strong [ref=e122]: 6개
+        - button [ref=e123] [cursor=pointer]:
+          - generic [ref=e124]: 불 확인 필요
+          - strong [ref=e127]: 0개
+        - button [ref=e128] [cursor=pointer]:
+          - generic [ref=e129]: 사용 중 예상
+          - strong [ref=e132]: 2개
+        - button [ref=e133] [cursor=pointer]:
+          - generic [ref=e134]: 비어 있음 예상
+          - strong [ref=e137]: 2개
+        - button [ref=e138] [cursor=pointer]:
+          - generic [ref=e139]: 점검 필요
+          - strong [ref=e142]: 2개
+      - generic [ref=e143]:
+        - region "강의실 6개 표시" [ref=e144]:
+          - heading "강의실 6개 표시" [level=2] [ref=e146]:
+            - text: 강의실
+            - generic [ref=e147]: 6개 표시
+          - generic [ref=e148]:
+            - button "시연 203호 · 수신 끊김 · 상세 보기" [ref=e149] [cursor=pointer]:
+              - generic [ref=e150]: 2층 · 실센서
+              - generic [ref=e152]:
+                - strong [ref=e153]: 시연 203호
+                - generic [ref=e154]: 수신 끊김
+              - generic [ref=e157]: 수신 지연 · 연결 확인 필요
+              - generic [ref=e158]: "마지막 예상: 비어 있음"
+              - generic [ref=e159]:
+                - generic [ref=e160]:
+                  - generic [ref=e161]: 실내 밝기
+                  - generic [ref=e164]: 40lux
+                - generic [ref=e165]:
+                  - generic [ref=e166]: 이산화탄소
+                  - generic [ref=e169]: 480ppm
+                - generic [ref=e170]:
+                  - generic [ref=e171]: 실내 온도
+                  - generic [ref=e174]: 22°C
+                - generic [ref=e175]:
+                  - generic [ref=e176]: 습도
+                  - generic [ref=e179]: 30%
+              - generic [ref=e180]: 마지막 수신 16시 32분 19초 KST
+            - button "시연 202호 · 수신 대기 · 상세 보기" [ref=e181] [cursor=pointer]:
+              - generic [ref=e182]: 2층 · 실센서
+              - generic [ref=e184]:
+                - strong [ref=e185]: 시연 202호
+                - generic [ref=e186]: 수신 대기
+              - generic [ref=e189]: 아직 받은 센서 측정이 없습니다. 센서가 켜져 있는지 확인해 주세요.
+              - generic [ref=e190]:
+                - generic [ref=e191]:
+                  - generic [ref=e192]: 실내 밝기
+                  - generic [ref=e195]: —lux
+                - generic [ref=e196]:
+                  - generic [ref=e197]: 이산화탄소
+                  - generic [ref=e200]: —ppm
+                - generic [ref=e201]:
+                  - generic [ref=e202]: 실내 온도
+                  - generic [ref=e205]: —°C
+                - generic [ref=e206]:
+                  - generic [ref=e207]: 습도
+                  - generic [ref=e210]: —%
+              - generic [ref=e211]: 마지막 수신 아직 없음 KST
+            - button "시연 101호 · 사용 중 예상 · 상세 보기" [pressed] [ref=e212] [cursor=pointer]:
+              - generic [ref=e213]: 1층 · 가상 센서
+              - generic [ref=e215]:
+                - strong [ref=e216]: 시연 101호
+                - generic [ref=e217]: 사용 중 예상
+              - generic [ref=e220]: 현재 불 확인 참고 조건에 해당하지 않습니다.
+              - generic [ref=e221]: "사용 여부 예상: 사용 중"
+              - generic [ref=e222]:
+                - generic [ref=e223]:
+                  - generic [ref=e224]: 실내 밝기
+                  - generic [ref=e227]: 492lux
+                - generic [ref=e228]:
+                  - generic [ref=e229]: 이산화탄소
+                  - generic [ref=e232]: 794ppm
+                - generic [ref=e233]:
+                  - generic [ref=e234]: 실내 온도
+                  - generic [ref=e237]: 21.3°C
+                - generic [ref=e238]:
+                  - generic [ref=e239]: 습도
+                  - generic [ref=e242]: 25%
+              - generic [ref=e243]: 마지막 수신 17시 24분 23초 KST
+            - button "시연 102호 · 비어 있음 예상 · 상세 보기" [ref=e244] [cursor=pointer]:
+              - generic [ref=e245]: 1층 · 가상 센서
+              - generic [ref=e247]:
+                - strong [ref=e248]: 시연 102호
+                - generic [ref=e249]: 비어 있음 예상
+              - generic [ref=e252]: 현재 불 확인 참고 조건에 해당하지 않습니다.
+              - generic [ref=e253]: "사용 여부 예상: 비어 있음"
+              - generic [ref=e254]:
+                - generic [ref=e255]:
+                  - generic [ref=e256]: 실내 밝기
+                  - generic [ref=e259]: 25lux
+                - generic [ref=e260]:
+                  - generic [ref=e261]: 이산화탄소
+                  - generic [ref=e264]: 594ppm
+                - generic [ref=e265]:
+                  - generic [ref=e266]: 실내 온도
+                  - generic [ref=e269]: 20.9°C
+                - generic [ref=e270]:
+                  - generic [ref=e271]: 습도
+                  - generic [ref=e274]: 26%
+              - generic [ref=e275]: 마지막 수신 17시 24분 23초 KST
+            - button "시연 103호 · 비어 있음 예상 · 상세 보기" [ref=e276] [cursor=pointer]:
+              - generic [ref=e277]: 1층 · 가상 센서
+              - generic [ref=e279]:
+                - strong [ref=e280]: 시연 103호
+                - generic [ref=e281]: 비어 있음 예상
+              - generic [ref=e284]: 현재 불 확인 참고 조건에 해당하지 않습니다.
+              - generic [ref=e285]: "사용 여부 예상: 비어 있음"
+              - generic [ref=e286]:
+                - generic [ref=e287]:
+                  - generic [ref=e288]: 실내 밝기
+                  - generic [ref=e291]: 22lux
+                - generic [ref=e292]:
+                  - generic [ref=e293]: 이산화탄소
+                  - generic [ref=e296]: 476ppm
+                - generic [ref=e297]:
+                  - generic [ref=e298]: 실내 온도
+                  - generic [ref=e301]: 21°C
+                - generic [ref=e302]:
+                  - generic [ref=e303]: 습도
+                  - generic [ref=e306]: 26%
+              - generic [ref=e307]: 마지막 수신 17시 24분 23초 KST
+            - button "시연 201호 · 사용 중 예상 · 상세 보기" [ref=e308] [cursor=pointer]:
+              - generic [ref=e309]: 2층 · 가상 센서
+              - generic [ref=e311]:
+                - strong [ref=e312]: 시연 201호
+                - generic [ref=e313]: 사용 중 예상
+              - generic [ref=e316]: 현재 불 확인 참고 조건에 해당하지 않습니다.
+              - generic [ref=e317]: "사용 여부 예상: 사용 중"
+              - generic [ref=e318]:
+                - generic [ref=e319]:
+                  - generic [ref=e320]: 실내 밝기
+                  - generic [ref=e323]: 528lux
+                - generic [ref=e324]:
+                  - generic [ref=e325]: 이산화탄소
+                  - generic [ref=e328]: 884ppm
+                - generic [ref=e329]:
+                  - generic [ref=e330]: 실내 온도
+                  - generic [ref=e333]: 21.7°C
+                - generic [ref=e334]:
+                  - generic [ref=e335]: 습도
+                  - generic [ref=e338]: 26%
+              - generic [ref=e339]: 마지막 수신 17시 24분 23초 KST
+          - paragraph [ref=e340]: ‘불 확인 필요’는 별도 순찰 참고 신호입니다. 사용 여부 예상과 중복될 수 있으며 예약·출입 가능 여부를 뜻하지 않습니다. 확인 대상부터 정렬합니다.
+        - complementary "선택 강의실 상세" [ref=e341]:
+          - generic [ref=e342]:
+            - generic [ref=e343]:
+              - heading "시연 101호" [level=2] [ref=e344]
+              - paragraph [ref=e345]: 시연 · 가상 센서 · 실제 수신 17시 24분 23초 KST
+            - generic [ref=e346]: 사용 중 예상
+          - region "모델 예측" [ref=e349]:
+            - generic [ref=e350]:
+              - heading "사용 중일 확률" [level=3] [ref=e351]
+              - strong [ref=e352]: 91%
+            - paragraph [ref=e354]: "모델 v7 예상: 사용 중 · 입력 시간대 14시 수요일. 모델 예상은 실제 관측 정답이 아닙니다."
+          - generic [ref=e355]:
+            - generic [ref=e356]:
+              - generic [ref=e357]: 실내 밝기
+              - strong [ref=e360]: 492lux
+            - generic [ref=e361]:
+              - generic [ref=e362]: 이산화탄소
+              - strong [ref=e365]: 794.3ppm
+            - generic [ref=e366]:
+              - generic [ref=e367]: 실내 온도
+              - strong [ref=e370]: 21.3°C
+            - generic [ref=e371]:
+              - generic [ref=e372]: 습도
+              - strong [ref=e375]: 25%
+          - region "불 확인 참고 이유" [ref=e376]:
+            - generic [ref=e377]:
+              - heading "순찰 참고 신호" [level=3] [ref=e378]
+              - generic [ref=e379]: 사용 중 예상
+            - paragraph [ref=e382]: 현재 불 확인 참고 조건에 해당하지 않습니다.
+            - generic [ref=e383]:
+              - generic [ref=e384]:
+                - term [ref=e385]: 측정으로 확인한 지속 시간
+                - definition [ref=e386]:
+                  - text: 0초
+                  - generic [ref=e387]: 시연 경과 시간
+              - generic [ref=e388]:
+                - term [ref=e389]: 조건을 관찰하기 시작한 시각
+                - definition [ref=e390]:
+                  - text: —
+                  - generic [ref=e391]: UTC · 새 측정 사이의 시간만 계산
+              - generic [ref=e392]:
+                - term [ref=e393]: 마지막 갱신
+                - definition [ref=e394]:
+                  - text: 17시 24분 23초
+                  - generic [ref=e395]: KST · 측정 14:56 UTC
+            - paragraph [ref=e396]: "시연용 가정: 실내 밝기 300 lux 이상 · CO₂ 650 ppm 이하 · 10분 지속"
+            - paragraph [ref=e397]: 햇빛 때문에 밝을 수 있고 CO₂는 환기의 영향을 받습니다. 사람 없음이나 불 켜짐을 확정하지 않습니다. 실제 시설에서는 기준 교정이 필요합니다.
+          - generic [ref=e398]:
+            - generic [ref=e399]:
+              - generic [ref=e400]:
+                - generic [ref=e401]: 실내 밝기 변화
+                - generic [ref=e404]: 최근 30회 · lux
+              - img "실내 밝기 최근 센서 변화" [ref=e405]
+              - generic [ref=e407]:
+                - generic [ref=e408]: 14:27
+                - generic [ref=e409]: 14:56 UTC
+              - paragraph [ref=e410]:
+                - generic [ref=e411]: 최저 491.8
+                - generic [ref=e412]: 최고 492 lux
+              - paragraph [ref=e413]: 표시 구간 처음 대비 +0.2 lux
+            - generic [ref=e414]:
+              - generic [ref=e415]:
+                - generic [ref=e416]: 이산화탄소 변화
+                - generic [ref=e419]: 최근 30회 · ppm
+              - img "이산화탄소 최근 센서 변화" [ref=e420]
+              - generic [ref=e422]:
+                - generic [ref=e423]: 14:27
+                - generic [ref=e424]: 14:56 UTC
+              - paragraph [ref=e425]:
+                - generic [ref=e426]: 최저 730.7
+                - generic [ref=e427]: 최고 794.3 ppm
+              - paragraph [ref=e428]: 표시 구간 처음 대비 +63.6 ppm
+            - generic [ref=e429]:
+              - generic [ref=e430]:
+                - generic [ref=e431]: 실내 온도 변화
+                - generic [ref=e434]: 최근 30회 · °C
+              - img "실내 온도 최근 센서 변화" [ref=e435]
+              - generic [ref=e437]:
+                - generic [ref=e438]: 14:27
+                - generic [ref=e439]: 14:56 UTC
+              - paragraph [ref=e440]:
+                - generic [ref=e441]: 최저 21.3
+                - generic [ref=e442]: 최고 21.3 °C
+              - paragraph [ref=e443]: 표시 구간 처음 대비 0 °C
+            - generic [ref=e444]:
+              - generic [ref=e445]:
+                - generic [ref=e446]: 습도 변화
+                - generic [ref=e449]: 최근 30회 · %
+              - img "습도 최근 센서 변화" [ref=e450]
+              - generic [ref=e452]:
+                - generic [ref=e453]: 14:27
+                - generic [ref=e454]: 14:56 UTC
+              - paragraph [ref=e455]:
+                - generic [ref=e456]: 최저 25
+                - generic [ref=e457]: 최고 25 %
+              - paragraph [ref=e458]: 표시 구간 처음 대비 -0.1 %
+          - paragraph [ref=e459]: 습도는 참고 정보이며, 낮은 습도를 빈 방의 증거로 사용하지 않습니다. 그래프는 마지막 측정까지의 변화입니다.
+          - group [ref=e460]:
+            - generic "측정 기록과 데이터 소스 (96건)" [ref=e461] [cursor=pointer]
+      - generic [ref=e462]: 예시 강의실 6개 · 사용 여부와 순찰 참고 서비스 · AWS EC2 배포 · 자동 소등 기능은 없습니다. 로그인·권한 관리는 이번 구현에 포함되지 않습니다.
