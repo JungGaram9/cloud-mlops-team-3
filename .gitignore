@@ -18,5 +18,5 @@ __pycache__/
 .env
 .env.*
 !.env.example
-/impeccable/
-/playwright/
+.impeccable/*
+.playwright/*
