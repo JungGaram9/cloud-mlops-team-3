@@ -133,6 +133,8 @@ try {
   const initial = renderToStaticMarkup(React.createElement(board.default));
   assert.match(initial, /불을 확인할 강의실을 먼저/);
   assert.match(initial, /별도 순찰 참고 신호/);
+  assert.match(initial, /05:00~24:00/);
+  assert.match(initial, /AWS EC2 배포/);
   console.log('PASS: patrol priority/filter; model coexistence; connection/pause suppression; thresholds/limits; humidity trend gap; initial board');
   console.log('PASS: JSX rendering; SHA-256 + row grouping; per-group best; source distributions; preflight disable; preview form ownership; unreadable job display');
 } finally {

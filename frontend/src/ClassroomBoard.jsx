@@ -194,7 +194,7 @@ export default function ClassroomBoard() {
     <section className="simulation-banner" aria-label="시연 제어">
       <div className="simulation-label"><b>{!data ? '현황 연결 중' : simCount ? '시연 모드 · 가상 센서 데이터' : '실센서 모드'}</b>
         <span>실제 시설이 아닌 예시 강의실 · 시연 {simCount}개 / 실센서 {rooms.length - simCount}개</span></div>
-      <div className="simulation-clock"><small>공유 시연 시각 · UTC</small><strong>{clock(sim?.observed_at)}</strong><span>{sim?.start || '08:00'}~{sim?.end || '22:00'}</span></div>
+      <div className="simulation-clock"><small>공유 시연 시각 · UTC</small><strong>{clock(sim?.observed_at)}</strong><span>{sim?.start || '05:00'}~{sim?.end || '24:00'}</span></div>
       <div className="simulation-controls">
         <button disabled={!sim || busy || sim.finished && !sim.playing} onClick={() => control({ action: sim.playing ? 'pause' : 'play' })}>
           {sim?.playing ? 'Ⅱ 일시정지' : sim?.finished ? '하루 시연 종료' : '▶ 재생'}</button>
@@ -204,7 +204,7 @@ export default function ClassroomBoard() {
           {[1, 5, 10, 20].map(speed => <option value={speed} key={speed}>1초 = {speed}분</option>)}
         </select></label>
       </div>
-      <p className="simulation-note">{!sim ? '시연 상태를 확인하고 있습니다.' : sim.playing ? '시연의 분 단위 센서 흐름을 재생 중입니다.' : sim.finished ? '22:00까지 도달했습니다. 처음부터 다시 볼 수 있습니다.' : '시연 일시정지 · 마지막 예상만 보존합니다.'} 시연은 실센서 방에 영향을 주지 않습니다.
+      <p className="simulation-note">{!sim ? '시연 상태를 확인하고 있습니다.' : sim.playing ? '시연의 분 단위 센서 흐름을 재생 중입니다.' : sim.finished ? `${sim.end || '24:00'}까지 도달했습니다. 처음부터 다시 볼 수 있습니다.` : '시연 일시정지 · 마지막 예상만 보존합니다.'} 시연은 실센서 방에 영향을 주지 않습니다.
         {sim?.scenario_id === 'classroom-day-v2' && ' 103호에는 수업 뒤 밝기가 남는 예시가 포함됩니다. 확인 신호는 시간표가 아닌 센서값으로 계산합니다.'}
         {sim?.scenario_id === 'classroom-day-v1' && ' 이전 시연이 진행 중입니다. ‘처음부터’를 누르면 밝기가 남는 예시를 볼 수 있습니다.'} {sim?.error}</p>
     </section>
@@ -253,6 +253,6 @@ export default function ClassroomBoard() {
         </table></div></details>
       </> : <p className="guard-empty">상세 정보를 불러오는 중입니다.</p>}
     </section>
-    <footer className="guard-footer">예시 강의실 6개 · 사용 여부와 순찰 참고 서비스 · 자동 소등 기능은 없습니다.</footer>
+    <footer className="guard-footer">예시 강의실 6개 · 사용 여부와 순찰 참고 서비스 · AWS EC2 배포 · 자동 소등 기능은 없습니다. 로그인·권한 관리는 이번 구현에 포함되지 않습니다.</footer>
   </main>;
 }

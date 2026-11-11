@@ -1,0 +1,68 @@
+name: classroom-occupancy-prod
+
+# EC2 운영 구성: 소스 바인드 마운트·자동 reload·Vite 개발 서버 없이 이미지만 실행한다.
+# 상태·로그·모델 레지스트리는 named volume에 보존하며, 첫 실행 때 이미지의 가중치·보고서로 초기화된다.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  api:
+    image: ${API_IMAGE:-classroom-occupancy-api:prod}
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    environment:
+      CLASSROOM_STATE_DIR: /app/state
+      SENSOR_STALE_SECONDS: ${SENSOR_STALE_SECONDS:-60}
+      LIGHT_CHECK_MIN_LUX: ${LIGHT_CHECK_MIN_LUX:-300}
+      LIGHT_CHECK_MAX_CO2_PPM: ${LIGHT_CHECK_MAX_CO2_PPM:-650}
+      LIGHT_CHECK_HOLD_SECONDS: ${LIGHT_CHECK_HOLD_SECONDS:-600}
+      LIGHT_CHECK_MAX_GAP_SECONDS: ${LIGHT_CHECK_MAX_GAP_SECONDS:-120}
+    volumes:
+      - state:/app/state
+      - logs:/app/logs
+      - weights:/app/models/weights
+      - reports:/app/reports
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+    init: true
+    restart: unless-stopped
+    mem_limit: 1200m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    logging: *logging
+
+  web:
+    image: ${WEB_IMAGE:-classroom-occupancy-web:prod}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
+    restart: unless-stopped
+    mem_limit: 128m
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *logging
+
+volumes:
+  state:
+  logs:
+  weights:
+  reports:

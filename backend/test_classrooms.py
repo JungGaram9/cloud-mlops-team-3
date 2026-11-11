@@ -10,8 +10,8 @@ from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 
 import backend.app as api
-from backend.classrooms import ClassroomService, HISTORY_LIMIT, MeasurementInput, ROOMS, scenario_sensors
-from models.model import load_model, predict_one, weight_path
+from backend.classrooms import DAY_END, DAY_START, ClassroomService, HISTORY_LIMIT, MeasurementInput, ROOMS, scenario_sensors
+from models.model import current_version, load_model, predict_one, weight_path
 from scripts.runtime_logging import RuntimeLogger
 
 
@@ -34,7 +34,7 @@ class ClassroomTests(unittest.TestCase):
     def test_scenario_is_smooth_reproducible_and_physically_valid(self):
         for room in ROOMS:
             previous = None
-            for minute in range(480, 1321):
+            for minute in range(DAY_START, DAY_END + 1):
                 values = scenario_sensors(room, minute)
                 self.assertEqual(values, scenario_sensors(room, minute))
                 MeasurementInput(measurement_id="fixture", observed_at=self.time, **values)
@@ -54,11 +54,11 @@ class ClassroomTests(unittest.TestCase):
         self.assertEqual(self.predict.call_count, initial)
         self.service.control("pause")
         self.service.advance(100)
-        self.assertEqual(self.service.clock_view()["minute"], 480)
+        self.assertEqual(self.service.clock_view()["minute"], DAY_START)
         self.service.control("speed", 20)
         self.service.control("play")
         self.service.advance(2)
-        self.assertEqual(self.service.clock_view()["minute"], 520)
+        self.assertEqual(self.service.clock_view()["minute"], DAY_START + 40)
         old_session = self.service.simulation["session_id"]
         self.service.control("restart")
         self.assertNotEqual(self.service.simulation["session_id"], old_session)
@@ -94,15 +94,60 @@ class ClassroomTests(unittest.TestCase):
         self.assertEqual(self.service.room_view("101")["status"], "unavailable")
         self.assertIsNone(self.service.room_view("101")["latest"]["prediction"])
 
-    def test_measurement_timezone_is_preserved_and_features_use_utc(self):
+    def test_measurement_timezone_is_preserved_and_features_use_sensor_local_time(self):
         observed = "2026-10-28T23:00:00+09:00"
         self.measurement(date=observed)
         row = self.service.room_view("101")["latest"]
         self.assertEqual(row["observed_at"], observed)
-        self.assertEqual(row["model_inputs"]["Hour"], 14)
+        self.assertEqual(row["model_inputs"]["Hour"], 23)
         self.assertEqual(row["model_inputs"]["DayOfWeek"], 2)
         with self.assertRaises(ValueError):
             MeasurementInput(measurement_id="bad", observed_at="2026-10-28T23:00:00", **row["sensors"])
+
+    def test_midnight_offsets_keep_local_features_and_utc_measurement_identity(self):
+        cases = (("101", "2026-10-29T00:30:00+09:00", 0, 3),
+                 ("102", "2026-10-28T23:30:00-05:00", 23, 2))
+        for room, observed, hour, weekday in cases:
+            with self.subTest(observed=observed):
+                self.time = datetime.fromisoformat(observed).astimezone(timezone.utc)
+                self.measurement(room=room, identity="offset", date=observed, CO2=500.0)
+                row = self.service.room_view(room)["latest"]
+                self.assertEqual((row["model_inputs"]["Hour"], row["model_inputs"]["DayOfWeek"]), (hour, weekday))
+                calls = self.predict.call_count
+                self.assertTrue(self.measurement(room=room, identity="offset", date=self.time.isoformat(), CO2=500.0)["duplicate"])
+                self.assertFalse(self.measurement(room=room, identity="same-instant", date=self.time.isoformat(), CO2=500.0)["accepted_as_latest"])
+                self.assertEqual(self.predict.call_count, calls)
+                self.time += timedelta(seconds=30)
+                self.measurement(room=room, identity="next", date=self.time.isoformat(), CO2=500.0)
+                self.assertEqual(self.service.room_view(room)["light_check"]["duration_seconds"], 30)
+
+    def test_day_boundaries_keep_05_to_24_range_and_next_day_model_features(self):
+        start = self.service.clock_view()
+        self.assertEqual((start["start"], start["end"], start["minute"]), ("05:00", "24:00", DAY_START))
+        self.service.simulation.update(minute=1319.0, last_emitted=None, speed=20)
+        self.service.advance(1)
+        self.assertEqual(self.service.clock_view()["minute"], 1339)
+        self.assertFalse(self.service.clock_view()["finished"])
+        self.assertTrue(self.service.simulation["playing"])
+        self.service.simulation.update(minute=float(DAY_END - 1), last_emitted=None)
+        self.service.advance(1)
+        end = self.service.clock_view()
+        self.assertEqual(end["minute"], DAY_END)
+        self.assertEqual(datetime.fromisoformat(end["observed_at"]), self.time.replace(hour=0) + timedelta(days=1))
+        latest = self.service.room_view("101")["latest"]
+        self.assertEqual((latest["model_inputs"]["Hour"], latest["model_inputs"]["DayOfWeek"]), (0, 3))
+        self.assertTrue(end["finished"])
+        self.assertFalse(end["playing"])
+        self.assertEqual(self.service.room_view("101")["light_check"]["state"], "paused")
+        calls = self.predict.call_count
+        self.service.advance(10)
+        self.assertEqual(self.predict.call_count, calls)
+        with self.assertRaises(ValueError):
+            self.service.control("play")
+        restarted = self.service.control("restart")
+        self.assertEqual(restarted["minute"], DAY_START)
+        self.assertEqual(self.service.room_view("101")["latest"]["model_inputs"]["Hour"], 5)
+        self.assertTrue(restarted["playing"])
 
     def test_recent_history_is_bounded_and_restart_preserves_state(self):
         for index in range(HISTORY_LIMIT + 4):
@@ -117,12 +162,13 @@ class ClassroomTests(unittest.TestCase):
         self.assertTrue(self.measurement(identity="device-0")["duplicate"])
 
     def test_stored_model_is_used_for_one_real_prediction(self):
-        model = load_model(weight_path("v3"))
+        version = current_version()
+        model = load_model(weight_path(version))
         self.service.predict = lambda values: {"prediction": predict_one(model, values), "features": model.metadata["features"],
                                                "threshold": model.metadata["threshold"], "fingerprint": "fixture"}
         receipt = self.measurement()
         latest = self.service.room_view("101")["latest"]
-        self.assertEqual(latest["prediction"]["model_version"], "v3")
+        self.assertEqual(latest["prediction"]["model_version"], version)
         self.assertEqual(receipt["inference_id"], latest["inference_id"])
         self.assertIn(latest["prediction"]["occupancy"], (0, 1))
 

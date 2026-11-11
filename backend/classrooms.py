@@ -28,6 +28,7 @@ SCHEDULES = {
 }
 SENSOR_NAMES = ("Temperature", "Humidity", "Light", "CO2")
 HISTORY_LIMIT = 96
+DAY_START, DAY_END = 300, 1440
 
 
 class MeasurementInput(BaseModel):
@@ -57,7 +58,7 @@ class MeasurementInput(BaseModel):
 
     @model_validator(mode="after")
     def check_sensors(self):
-        date = self.observed_at.astimezone(timezone.utc)
+        date = self.observed_at
         SensorInput(**{name: getattr(self, name) for name in SENSOR_NAMES}, Hour=date.hour, DayOfWeek=date.weekday())
         return self
 
@@ -141,7 +142,7 @@ class ClassroomService:
 
     def new_session(self):
         return {"session_id": uuid.uuid4().hex, "scenario_id": "classroom-day-v2", "day": self.now().date().isoformat(),
-                "minute": 480.0, "playing": True, "speed": 5, "last_emitted": None}
+                "minute": float(DAY_START), "playing": True, "speed": 5, "last_emitted": None}
 
     def save_clock(self):
         self.db.execute("INSERT OR REPLACE INTO settings VALUES('simulation',?)", (json.dumps(self.simulation),))
@@ -179,7 +180,7 @@ class ClassroomService:
         self.require_room(room_id)
         date = datetime.fromisoformat(observed_at)
         utc_date = date.astimezone(timezone.utc)
-        inputs = SensorInput(**sensors, Hour=utc_date.hour, DayOfWeek=utc_date.weekday()).model_dump()
+        inputs = SensorInput(**sensors, Hour=date.hour, DayOfWeek=date.weekday()).model_dump()
         identity = {"observed_at": utc_date.isoformat(), "sensors": sensors, "session_id": session_id}
         digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
         with self.lock:
@@ -249,7 +250,7 @@ class ClassroomService:
         with self.lock:
             if not self.simulation["playing"]:
                 return
-            target = min(1320.0, self.simulation["minute"] + max(0, elapsed) * self.simulation["speed"])
+            target = min(float(DAY_END), self.simulation["minute"] + max(0, elapsed) * self.simulation["speed"])
             if int(self.simulation["minute"]) != self.simulation["last_emitted"]:
                 self.emit()
             # 고배속에서도 건너뛴 1분 측정들을 생성해 같은 가상 시간의 판단이 같게 한다.
@@ -257,7 +258,7 @@ class ClassroomService:
                 self.simulation["minute"] = float(minute)
                 self.emit()
             self.simulation["minute"] = target
-            if self.simulation["minute"] >= 1320:
+            if self.simulation["minute"] >= DAY_END:
                 self.simulation["playing"] = False
             self.save_clock()
 
@@ -271,7 +272,7 @@ class ClassroomService:
             elif action == "pause":
                 self.simulation["playing"] = False
             elif action == "play":
-                if self.simulation["minute"] >= 1320:
+                if self.simulation["minute"] >= DAY_END:
                     raise ValueError("하루 시연이 끝났습니다. 처음부터를 선택하세요.")
                 self.simulation["playing"] = True
             self.save_clock()
@@ -291,8 +292,8 @@ class ClassroomService:
     def clock_view(self):
         minute = self.simulation["minute"]
         date = datetime.fromisoformat(self.simulation["day"]).replace(tzinfo=timezone.utc) + timedelta(minutes=minute)
-        return {**self.simulation, "observed_at": date.isoformat(), "timezone": "UTC", "start": "08:00", "end": "22:00",
-                "finished": minute >= 1320}
+        return {**self.simulation, "observed_at": date.isoformat(), "timezone": "UTC", "start": f"{DAY_START // 60:02}:00",
+                "end": f"{DAY_END // 60:02}:00", "finished": minute >= DAY_END}
 
     def light_view(self, latest, status, paused):
         signal = dict((latest or {}).get("light_check", {}))

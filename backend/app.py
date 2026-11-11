@@ -217,7 +217,7 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
             logger.write("api", "lifecycle", event="stopped")
 
     application = FastAPI(title="강의실 사용 현황과 모델 관리", version="3.0",
-                          description="시연·실센서 측정으로 강의실 현황을 확인하고 기존 모델 실험을 관리합니다. 시연 측정 시각과 모델 시간 피처는 UTC 기준입니다.",
+                          description="시연·실센서 측정으로 강의실 현황을 확인하고 기존 모델 실험을 관리합니다. 시연 측정 시각은 UTC이며 모델 시간 피처는 측정 시각의 offset 기준 현지 시각에서 파생합니다.",
                           docs_url=None, redoc_url=None, lifespan=lifespan)
     application.mount("/static/swagger", StaticFiles(directory=swagger_ui_path), name="swagger")
 
@@ -338,7 +338,7 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
         except KeyError as error:
             raise HTTPException(404, str(error)) from error
 
-    @application.post("/classrooms/{classroom_id}/measurements", tags=["강의실 현황"], summary="실센서 측정 수신, UTC에서 시간·요일 파생")
+    @application.post("/classrooms/{classroom_id}/measurements", tags=["강의실 현황"], summary="실센서 측정 수신, 센서 현지 시각에서 시간·요일 파생")
     def receive_measurement(classroom_id: str, measurement: MeasurementInput, request: Request):
         try:
             return classrooms().ingest(classroom_id, measurement_id=measurement.measurement_id,
