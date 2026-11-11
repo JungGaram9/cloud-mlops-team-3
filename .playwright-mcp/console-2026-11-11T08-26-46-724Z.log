@@ -1,5 +1,0 @@
-[     100ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=04045781:15805
-[    1390ms] [LOG] %coverused-font%c Primary font: inter (100% of text) color: oklch(84% 0.19 80.46); font-weight: bold color: inherit JSHandle@node @ http://localhost:8400/detect.js:4306
-[    1390ms] [LOG] %cnested-cards%c Card inside card (and 4 more) color: oklch(84% 0.19 80.46); font-weight: bold color: inherit JSHandle@node @ http://localhost:8400/detect.js:4306
-[   17996ms] [LOG] %coverused-font%c Primary font: inter (100% of text) color: oklch(84% 0.19 80.46); font-weight: bold color: inherit JSHandle@node @ http://localhost:8400/detect.js:4306
-[   17996ms] [LOG] %cnested-cards%c Card inside card (and 1 more) color: oklch(84% 0.19 80.46); font-weight: bold color: inherit JSHandle@node @ http://localhost:8400/detect.js:4306
