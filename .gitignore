@@ -19,4 +19,4 @@ __pycache__/
 .env.*
 !.env.example
 .impeccable/*
-.playwright/*
+.playwright-mcp/*

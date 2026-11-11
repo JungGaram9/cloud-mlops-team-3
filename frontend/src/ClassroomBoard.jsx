@@ -286,10 +286,11 @@ export default function ClassroomBoard() {
               <summary>시연 설정</summary>
               <div className="sim-pop">
                 <p className="sim-range">가상 하루 {sim?.start || '05:00'}~{sim?.end || '24:00'} · 시연은 실센서 방에 영향을 주지 않습니다.</p>
-                <label>속도 <select aria-label="시연 속도" value={sim?.speed || 5} disabled={!sim || busy}
-                  onChange={event => control({ action: 'speed', speed: Number(event.target.value) })}>
-                  {[1, 5, 10, 20].map(speed => <option value={speed} key={speed}>1초 = {speed}분</option>)}
-                </select></label>
+                <div className="sim-speed"><span id="sim-speed-label">시간 흐름 <small>실제 1초에</small></span>
+                  <div className="segmented" role="group" aria-labelledby="sim-speed-label">
+                    {[1, 5, 10, 20].map(speed => <button type="button" key={speed} aria-pressed={(sim?.speed || 5) === speed} disabled={!sim || busy}
+                      onClick={() => control({ action: 'speed', speed })}>{speed}분</button>)}
+                  </div></div>
                 {confirmRestart
                   ? <div className="sim-confirm" role="alert"><p>처음부터 다시 시작할까요? 이 화면을 보는 모든 사람의 시연 시계가 함께 05:00으로 돌아갑니다.</p>
                     <span><button type="button" className="danger" disabled={busy} onClick={() => { setConfirmRestart(false); control({ action: 'restart' }); }}>다시 시작</button>

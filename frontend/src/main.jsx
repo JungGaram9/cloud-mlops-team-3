@@ -919,7 +919,7 @@ function ThemeSwitch() {
 function App() {
   const [area, setArea] = useState('classrooms');
   return <div className={`service-shell ${area === 'management' ? 'management-area' : ''}`}>
-    <header className="service-nav"><a href="#" onClick={event => { event.preventDefault(); setArea('classrooms'); }} className="service-brand"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 21V5l9-3v19M12 8l9 2v11M3 21h18M7 9v.01M7 13v.01M7 17v.01M16 14v.01M16 18v.01" /></svg>강의실 지킴이</a>
+    <header className="service-nav"><a href="#" onClick={event => { event.preventDefault(); setArea('classrooms'); }} className="service-brand"><img src="/icon.svg" width="26" height="26" alt="" />강의실 지킴이</a>
       <nav aria-label="서비스 영역"><button aria-current={area === 'classrooms' ? 'page' : undefined} onClick={() => setArea('classrooms')}>강의실 현황</button>
         <button aria-current={area === 'management' ? 'page' : undefined} onClick={() => setArea('management')}>모델 관리</button></nav>
       <span className="service-purpose">센서로 확인하는 공간의 현재</span><ThemeSwitch /></header>

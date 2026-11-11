@@ -278,7 +278,7 @@ footer { margin-top: 30px; font-size: 12px; color: var(--fg-muted); border-top: 
 .service-shell { min-height: 100vh; background: var(--bg); color: var(--fg); }
 .service-nav { height: 56px; position: sticky; top: 0; z-index: 40; display: flex; align-items: stretch; gap: 28px; padding: 0 20px; background: var(--bg); border-bottom: 1px solid var(--line); word-break: keep-all; }
 .service-brand { display: flex; gap: 10px; align-items: center; font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); white-space: nowrap; }
-.service-brand svg { color: var(--brand); }
+.service-brand img { display: block; flex-shrink: 0; }
 .service-nav nav { display: flex; gap: 4px; }
 .service-nav nav button { padding: 0 12px; background: transparent; color: var(--fg-muted); border: 0; border-radius: 0; font-size: 15px; font-weight: 500; box-shadow: inset 0 -2px 0 transparent; transition: color .15s, box-shadow .15s; }
 .service-nav nav button:hover { color: var(--fg); background: transparent; }
@@ -503,7 +503,7 @@ footer { margin-top: 30px; font-size: 12px; color: var(--fg-muted); border-top: 
 @media (max-width: 560px) {
   .service-nav { padding: 0 12px; gap: 10px; }
   .service-brand { font-size: 15px; }
-  .service-brand svg { display: none; }
+  .service-brand img { width: 22px; height: 22px; }
   .service-nav nav button { padding: 0 8px; white-space: nowrap; }
   .theme-switch { padding: 2px; }
   .theme-switch button { padding: 0 9px; min-height: 30px; }
@@ -560,3 +560,10 @@ th { font-weight: 500; }
 .range-control > small, .select-control small { color: var(--fg-muted); font-weight: 400; }
 .topbar { background: var(--bg); }
 .training-form table { min-width: 620px; }
+.sim-speed { display: grid; gap: 6px; }
+.sim-speed > span { font-size: 14px; color: var(--fg-light); }
+.sim-speed small { font-size: 13px; color: var(--fg-muted); margin-left: 4px; }
+.segmented { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.sim-inline .segmented button { justify-content: center; min-height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.sim-inline .segmented button:hover:not(:disabled) { background: transparent; color: var(--fg); }
+.sim-inline .segmented button[aria-pressed=true] { background: var(--surface-3); color: var(--fg); }
