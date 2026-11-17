@@ -32,8 +32,8 @@ class SensorInput(BaseModel):
     Humidity: float = Field(ge=0, le=100, description="상대습도: 0~100%")
     Light: float = Field(ge=0, le=1e6, description="조도: 0~1,000,000 lux")
     CO2: float = Field(gt=0, le=1e6, description="이산화탄소 농도: 0 초과~1,000,000 ppm")
-    Hour: int = Field(ge=0, le=23, description="측정 시간: 0~23시, CSV date의 시와 동일 기준")
-    DayOfWeek: int = Field(ge=0, le=6, description="측정 요일: 월요일 0, 화 1, 수 2, 목 3, 금 4, 토 5, 일 6")
+    Hour: int = Field(ge=0, le=23, description="0~23시, 모델의 time_feature_policy 기준. 서버의 자동 시간대 변환 없음")
+    DayOfWeek: int = Field(ge=0, le=6, description="월요일 0~일요일 6, 모델의 시간 기준과 같은 요일")
 
 
 def encoded_features(features: tuple | list, encoding: str = ENCODING) -> list[str]:
@@ -163,6 +163,9 @@ def pair_fingerprint(checkpoints: dict) -> str:
         contract = {"mode": mode, "features": checkpoint["features"],
                     "encoding": checkpoint.get("encoding", "sensor-only-v1"), "threshold": float(checkpoint["threshold"]),
                     "network_config": {**network_config, "dropout": float(network_config["dropout"])}}
+        # 정책 없는 기존 체크포인트의 지문은 그대로 유지한다.
+        if "time_feature_policy" in checkpoint:
+            contract["time_feature_policy"] = checkpoint["time_feature_policy"]
         digest.update(json.dumps(contract, sort_keys=True).encode())
         tensors = {**checkpoint["state_dict"], "mean": checkpoint["mean"], "scale": checkpoint["scale"]}
         for name, tensor in sorted(tensors.items()):
