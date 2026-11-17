@@ -1,0 +1,29 @@
+{
+  "experiment_id": "feedback-20261117-f172d336",
+  "reproduction_training_runs": 2,
+  "hyperparameter_changes": 0,
+  "test_evaluation_executed": false,
+  "checks": [
+    {
+      "version": "v1",
+      "weights_bitwise_equal": false,
+      "scaler_bitwise_equal": false,
+      "history_equal": false,
+      "epochs_run": 200,
+      "best_epoch_equal": true,
+      "data_plan_fingerprint_equal": true,
+      "original_checkpoint_sha256": "e449169ed1893473e7536fd663c81a241b23d66258a7203b0991f9804740eb84"
+    },
+    {
+      "version": "v2",
+      "weights_bitwise_equal": false,
+      "scaler_bitwise_equal": false,
+      "history_equal": false,
+      "epochs_run": 200,
+      "best_epoch_equal": true,
+      "data_plan_fingerprint_equal": true,
+      "original_checkpoint_sha256": "6c373c8fc26716850d90d245a92e9ceaf73dcf6e122c638d9f28bccec927fa00"
+    }
+  ],
+  "passed": false
+}

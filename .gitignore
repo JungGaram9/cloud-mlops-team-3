@@ -12,6 +12,10 @@ __pycache__/
 /data/occupancy-detection-dataset.zip
 /data/occupancy-detection-dataset/
 /data/simulated/
+/models/weights/experiments/
+/reports/experiments/
+/reports/operations/
+/reports/log-analysis/
 **/.write-*.tmp
 /frontend/node_modules/
 /frontend/dist/
