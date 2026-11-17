@@ -6,6 +6,9 @@ import json
 import math
 import os
 import platform
+import argparse
+import tempfile
+import uuid
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta, timezone
@@ -23,6 +26,17 @@ SENSORS = COLUMNS[1:5]
 VERSION = "dynamic-sensors-v1"
 EVENT_KINDS = ("weekend_empty_light", "night_empty_light", "forgotten_lights", "night_occupied",
                "occupied_dark", "ventilated_occupied", "co2_residual")
+FAULT_KINDS = ("freeze", "spike", "drift", "missing", "dropout", "nonfinite")
+OBSERVATION_POLICY = "finite_in_physical_envelope_no_imputation_v1"
+TIME_FEATURE_POLICY = {
+    "id": "source-local-time-v1",
+    "features": {"Room_A": "canonical UTC -> Europe/Vienna (IANA DST)",
+                 "Room_B": "canonical UTC -> Europe/Vienna (IANA DST)",
+                 "legacy": "CSV wall clock unchanged; unknown timezone is not inferred",
+                 "synthetic": "CSV explicit offset local time"},
+    "split_axis": "Graz and offset-aware timestamps: UTC naive; timezone-unknown legacy: unchanged naive wall clock",
+    "inference": "caller supplies Hour/DayOfWeek in the recorded feature basis; no automatic timezone conversion",
+}
 BOUNDS = np.array([[-20, 45], [1, 99], [0, 20000], [250, 10000]], dtype=float)
 
 
@@ -47,6 +61,12 @@ class Config:
     volume_m3: float = 90
     event_probability: float = 0.03
     latitude: float = 37.5
+    calibration_scope: str = "canonical"
+    validation_ratio: float = 0.2
+    observation_mode: str = "normal"
+    fault_probability: float = 0.03
+    fault_min_minutes: int = 30
+    fault_max_minutes: int = 180
 
     def __post_init__(self):
         date.fromisoformat(self.start_date)
@@ -57,6 +77,11 @@ class Config:
                 and 0 <= self.event_probability <= 1 and -65 <= self.latitude <= 65
                 and self.mode in ("normal", "exceptions")):
             raise ValueError("생성 설정의 범위를 확인하세요.")
+        if self.calibration_scope not in ("canonical", "fit_only") or not .1 <= self.validation_ratio <= .4:
+            raise ValueError("보정 범위·검증 비율을 확인하세요.")
+        if (self.observation_mode not in ("off", "normal", "stress") or not 0 <= self.fault_probability <= 1
+                or not 5 <= self.fault_min_minutes <= self.fault_max_minutes <= 2880):
+            raise ValueError("관측 오류 모드·가정 확률·지속 시간을 확인하세요.")
         if self.mode == "exceptions" and self.days < 7:
             raise ValueError("예외 집중 모드는 평일·주말을 포함하도록 7일 이상 지정하세요.")
 
@@ -66,7 +91,32 @@ class Config:
         return cls(**{key: type(value)(os.environ.get(f"SIM_{key.upper()}", value)) for key, value in defaults.items()})
 
 
-def read_training(root=ROOT):
+def partition_indices(dates, sources, ratio, shared=False):
+    """생성기 보정과 모델 학습이 동일한 실제 행 경계를 사용한다."""
+    groups = ["Graz" if shared and name in ("Room_A", "Room_B") else name for name in sources]
+    fit, validation = [], []
+    for group in sorted(set(groups)):
+        order = sorted((i for i, name in enumerate(groups) if name == group), key=lambda i: dates[i])
+        cut = int(len(order) * (1 - ratio))
+        while 0 < cut < len(order) and (dates[order[cut - 1]].date() == dates[order[cut]].date()
+                if shared else dates[order[cut - 1]] == dates[order[cut]]):
+            cut -= 1
+        if not 0 < cut < len(order):
+            raise ValueError(f"{group}: 시간 그룹을 유지하는 분할이 불가능합니다.")
+        boundary = dates[order[cut]] - timedelta(hours=1)
+        fit.extend(i for i in order[:cut] if not shared or dates[i] < boundary)
+        validation.extend(order[cut:])
+    return fit, validation
+
+
+def source_times(stamp, source):
+    """분할의 시간축과 생활 패턴 피처의 현지 시각을 분리한다."""
+    axis = stamp.astimezone(timezone.utc).replace(tzinfo=None) if stamp.tzinfo else stamp
+    local = axis.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Europe/Vienna")) if source in ("Room_A", "Room_B") else stamp
+    return axis, local
+
+
+def read_training(root=ROOT, validation_ratio=None):
     """canonical training만 읽고 평가 CSV를 열지 않는다. 중복 파생본도 합치지 않는다."""
     path, sidecar = root / "data/training_dataset.csv", root / "data/dataset_sources.json"
     info = json.loads(sidecar.read_text(encoding="utf-8"))[path.name]
@@ -80,12 +130,11 @@ def read_training(root=ROOT):
     if len(raw) != len(info["sources"]):
         raise ValueError("학습 행과 출처 개수가 다릅니다.")
     records, seen = defaultdict(list), set()
-    for row, source in zip(raw, info["sources"]):
+    for index, (row, source) in enumerate(zip(raw, info["sources"])):
         if source not in ("legacy", "Room_A", "Room_B"):
             raise ValueError(f"알 수 없는 학습 출처: {source}")
         stamp = datetime.fromisoformat(row["date"])
-        axis = stamp.astimezone(timezone.utc).replace(tzinfo=None) if stamp.tzinfo else stamp
-        local = stamp if source == "legacy" else axis.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Europe/Vienna"))
+        axis, local = source_times(stamp, source)
         values = np.array([float(row[key]) for key in SENSORS])
         label = float(row["Occupancy"])
         if not np.isfinite(values).all() or not (-50 <= values[0] <= 60 and 0 <= values[1] <= 100
@@ -95,13 +144,24 @@ def read_training(root=ROOT):
         if identity in seen:
             raise ValueError("같은 출처의 학습 시각이 중복됩니다. 보정 가중을 중복 적용하지 않습니다.")
         seen.add(identity)
-        records[source].append({"axis": axis, "local": local, "x": values, "y": int(label), "count": None, "open": None})
+        records[source].append({"axis": axis, "local": local, "x": values, "y": int(label), "count": None, "open": None, "canonical_index": index})
     provenance = {"canonical_file": "data/training_dataset.csv", "canonical_sha256": digest(path),
                   "source_metadata_sha256": digest(sidecar), "canonical_rows": len(raw), "role": "training_only",
+                  "time_feature_policy": TIME_FEATURE_POLICY,
                   "excluded": ["test_dataset.csv", "graz_*.csv", "raw copies", "feature occupancy sensor label"],
                   "timezones": {"legacy": "unknown local wall clock, no assumed UTC/Vienna/KST conversion",
                                 "Room_A": "canonical UTC -> Europe/Vienna", "Room_B": "canonical UTC -> Europe/Vienna"},
                   "auxiliary": {}}
+    if validation_ratio is not None:
+        ordered = sorted((row for rows in records.values() for row in rows), key=lambda row: row["canonical_index"])
+        fit, validation = partition_indices([row["axis"] for row in ordered], info["sources"], validation_ratio, True)
+        selected = set(fit)
+        records = {name: [row for row in rows if row["canonical_index"] in selected] for name, rows in records.items()}
+        records = {name: rows for name, rows in records.items() if rows}
+        provenance.update(role="fit_only", real_partition={"strategy": "shared_graz_calendar_day_1h_gap",
+            "validation_ratio": validation_ratio, "fit_rows": len(fit), "validation_rows": len(validation),
+            "fit_indices_sha256": hashlib.sha256(json.dumps(fit, separators=(",", ":")).encode()).hexdigest(),
+            "validation_indices_sha256": hashlib.sha256(json.dumps(validation, separators=(",", ":")).encode()).hexdigest()})
     for source, rows in records.items():
         rows.sort(key=lambda row: row["axis"])
         if source == "legacy":
@@ -168,6 +228,56 @@ def transitions(rows):
     pairs = [(a, b, gap / 60) for a, b, gap in zip(rows, rows[1:], gaps)
              if 0 < gap <= cadence * 1.6 and a["local"].date() == b["local"].date()]
     return cadence, pairs
+
+
+def sensor_diagnostics(rows, step_seconds):
+    """연속 정체는 관측 사실만 집계한다. 센서 고장이나 값 채움으로 단정하지 않는다."""
+    stamps = [datetime.fromisoformat(row[0]) for row in rows]
+    gaps = [(b - a).total_seconds() for a, b in zip(stamps, stamps[1:])]
+    sensors = {}
+    for column, name in enumerate(SENSORS, 1):
+        missing = nonfinite = outside = boundary = repeats = 0
+        longest = current = 0
+        previous = None
+        for index, row in enumerate(rows):
+            value = row[column]
+            if value is None or value == "":
+                missing += 1
+                current, previous = 0, None
+                continue
+            value = float(value)
+            if not math.isfinite(value):
+                nonfinite += 1
+                current, previous = 0, None
+                continue
+            lower, upper = BOUNDS[column - 1]
+            outside += int(not lower <= value <= upper)
+            boundary += int(value == lower or value == upper)
+            same = previous is not None and value == previous and index > 0 and gaps[index - 1] == step_seconds
+            repeats += int(same)
+            current = current + 1 if same else 1
+            longest = max(longest, current)
+            previous = value
+        sensors[name] = {"missing": missing, "nonfinite": nonfinite, "outside_envelope": outside,
+            "boundary_hits": boundary, "adjacent_equal_pairs": repeats, "longest_constant_rows": longest,
+            "longest_constant_minutes": max(0, longest - 1) * step_seconds / 60}
+    return {"rows": len(rows), "duplicate_timestamps": len(stamps) - len(set(stamps)),
+        "nonincreasing_time_pairs": sum(gap <= 0 for gap in gaps),
+        "gap_pairs": sum(gap > step_seconds for gap in gaps), "sensors": sensors}
+
+
+def observation_calibration(rows, cadence):
+    values = np.array([row["x"] for row in rows])
+    resolution = []
+    # 격자 정합률만 추정한다. 해상도·정체가 장치 사양이나 고장률이라는 뜻은 아니다.
+    for column in range(4):
+        candidates = [step for step in (.001, .005, .01, .05, .1, .5, 1., 5., 10.)
+                      if np.mean(np.isclose(values[:, column] / step, np.round(values[:, column] / step),
+                                            atol=1e-5, rtol=0)) >= .98]
+        resolution.append(max(candidates) if candidates else .001)
+    return {"quantization_step": resolution, "resolution_method": "coarsest grid matching >=98% of selected calibration rows; fallback .001",
+        "measured": sensor_diagnostics([(row["axis"].isoformat(), *row["x"]) for row in rows], cadence),
+        "fault_rates": "unknown; configured probabilities and durations are assumptions, not measured failure rates"}
 
 
 def calibration(records, provenance):
@@ -243,6 +353,7 @@ def calibration(records, provenance):
         tau = np.clip(-(cadence / 60) / np.log(np.clip(acf, .01, .9999)), 5, 180)
         durations = np.array(complete_durations or [60.])
         profiles[source] = {"rows": len(rows), "first_axis": rows[0]["axis"].isoformat(), "last_axis": rows[-1]["axis"].isoformat(),
+            "observation_calibration": observation_calibration(rows, cadence),
             "first_local": rows[0]["local"].isoformat(), "last_local": rows[-1]["local"].isoformat(),
             "cadence_seconds": cadence, "valid_transition_pairs": len(pairs), "summary": describe(values),
             "occupancy_fraction": float(labels.mean()), "bright_vacant_rows": int(np.sum((labels == 0) & (values[:, 2] >= 300))),
@@ -265,7 +376,7 @@ def calibration(records, provenance):
             "max_observed_people": max(counts) if counts else None, "relaxation_minutes": tau.tolist(),
             "noise_covariance": covariance.tolist(), "noise_tau_minutes": float(np.clip(np.median(tau) / 6, 2, 30))}
     result = {"version": VERSION, "provenance": provenance, "sources": profiles,
-        "assumptions": {"training_scope": "canonical training only; auxiliary selected by training membership",
+        "assumptions": {"training_scope": "real fit only; same shared-day split and embargo" if provenance["role"] == "fit_only" else "canonical training only; auxiliary selected by training membership",
             "day_probability_floor": .01, "day_probability_ceiling": .99, "weekday_prior_weight": .25,
             "unobserved_duration_fallback_minutes": 60, "duration_limits_minutes": [10, 360],
             "reference_volume_m3": 90, "volume_and_capacity": "not identifiable from sensors; configurable transfer assumptions",
@@ -343,13 +454,12 @@ def events_for_room(config, source, room_index, rng):
             hour = 22 if "night" in kind else int(rng.integers(9, 17))
             add(kind, day, hour * 60, rng.uniform(150, 220), min(config.capacity, max(3, person_count(rng, source, config))))
     if config.mode == "exceptions":
-        # 강제 사건 비중은 관측 발생률이 아니다. 각 사건을 주/방별로 분산한다.
+        # 방 전체를 분할하므로 각 방에 독립 사건이 있어야 train에도 모든 유형이 남는다.
         for index, kind in enumerate(EVENT_KINDS):
-            if index % config.rooms != room_index:
-                continue
             weekday = (5, 1, 2, 3, 4, 0, 6)[index]
-            day = next(day for day in days if day.weekday() == weekday)
-            minute = 22 * 60 if kind == "night_empty_light" else 21 * 60 + rng.uniform(0, 60) if kind == "night_occupied" else rng.uniform(9 * 60, 16 * 60)
+            choices = [day for day in days if day.weekday() == weekday]
+            day = choices[int(rng.integers(len(choices)))]
+            minute = 22 * 60 + rng.uniform(0, 20) if kind == "night_empty_light" else 21 * 60 + rng.uniform(0, 60) if kind == "night_occupied" else rng.uniform(9 * 60, 16 * 60)
             add(kind, day, minute, rng.uniform(160, 230), min(config.capacity, max(3, person_count(rng, source, config))))
     return sorted(events, key=lambda event: (event["start"], event["id"]))
 
@@ -470,6 +580,153 @@ def generate_room(config, profile, room_index, stamps):
     traits = {"calibration_source": source_name, "volume_m3_assumed": volume, "orientation_assumed": orientation,
               "lamp_gain_lux": gain, "sensor_bias": sensor_bias.tolist(), "capacity_assumed": config.capacity}
     return rows, metadata, events, traits
+
+
+def preprocess_observation(values, received=True):
+    """재생과 학습은 같은 수신값을 사용한다. 결측·불능값은 보간 없이 제외한다."""
+    if not received:
+        return None, ["collection_interruption"]
+    if len(values) != 4:
+        return None, ["sensor_count_mismatch"]
+    reasons, cleaned = [], []
+    for name, value, (lower, upper) in zip(SENSORS, values, BOUNDS):
+        if value is None or value == "":
+            reasons.append(f"{name}:missing")
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            reasons.append(f"{name}:not_numeric")
+            continue
+        if not math.isfinite(number):
+            reasons.append(f"{name}:nonfinite")
+        elif not lower <= number <= upper:
+            reasons.append(f"{name}:outside_envelope")
+        cleaned.append(number)
+    return (None, reasons) if reasons else (cleaned, [])
+
+
+def observe_room(rows, metadata, config, source, room_index):
+    """물리 상태와 별도 난수열로 관측 오류를 만들고 독립 인원수 정답을 보존한다."""
+    rng = np.random.default_rng(np.random.SeedSequence([config.seed, room_index, 0x5E4502]))
+    faults = []
+    step = config.step_seconds
+    for day_index in range(config.days):
+        for kind_index, kind in enumerate(FAULT_KINDS):
+            forced = config.observation_mode == "stress" and day_index == kind_index % config.days
+            if not forced and not (config.observation_mode == "normal" and rng.random() < config.fault_probability):
+                continue
+            # 스트레스는 시간대를 분산한다. 발생률·지속 시간은 관측 추정이 아닌 가정이다.
+            minute = (60 + 210 * kind_index + rng.uniform(0, 25)) if forced else rng.uniform(0, 1440)
+            start = min(len(rows) - 1, int((day_index * 86400 + minute * 60) / step))
+            duration = rng.uniform(config.fault_min_minutes, config.fault_max_minutes)
+            count = max(2, math.ceil(duration * 60 / step))
+            if kind == "spike":
+                count = int(rng.integers(1, 4))
+            end = min(len(rows), start + count)
+            sensor = int(rng.integers(4))
+            faults.append({"id": f"r{room_index + 1:02}-fault-{len(faults):04}", "kind": kind,
+                "sensor": SENSORS[sensor], "start_index": start, "end_index": end,
+                "start": rows[start][0], "end_exclusive": (datetime.fromisoformat(rows[end - 1][0]) + timedelta(seconds=step)).isoformat(),
+                "duration_minutes": (end - start) * step / 60,
+                "right_censored": start + count > len(rows),
+                "amplitude": float(rng.choice([-1, 1]) * rng.uniform(.6, 1.4)), "assumed": True})
+    resolution = np.array(source["observation_calibration"]["quantization_step"])
+    scales = np.array([3., 12., 1000., 1200.])
+    frozen = {}
+    raw_rows, clean_rows, clean_metadata, audit = [], [], [], []
+    for index, (row, meta) in enumerate(zip(rows, metadata)):
+        values = np.round(np.array(row[1:5]) / resolution) * resolution if config.observation_mode != "off" else np.array(row[1:5])
+        values = [round(float(value), 6) for value in values]
+        active = [fault for fault in faults if fault["start_index"] <= index < fault["end_index"]]
+        received = True
+        for fault in sorted(active, key=lambda item: FAULT_KINDS.index(item["kind"])):
+            kind, sensor = fault["kind"], SENSORS.index(fault["sensor"])
+            if kind == "freeze":
+                frozen.setdefault(fault["id"], values[sensor])
+                values[sensor] = frozen[fault["id"]]
+            elif kind == "spike":
+                values[sensor] = round(float(values[sensor]) + fault["amplitude"] * scales[sensor], 6)
+            elif kind == "drift":
+                fraction = (index - fault["start_index"]) / max(1, fault["end_index"] - fault["start_index"] - 1)
+                values[sensor] = round(float(values[sensor]) + fault["amplitude"] * scales[sensor] * .3 * fraction, 6)
+            elif kind == "missing":
+                values[sensor] = ""
+            elif kind == "nonfinite":
+                values[sensor] = "nan" if fault["amplitude"] < 0 else "inf"
+            elif kind == "dropout":
+                received = False
+        # 원시 CSV와 감사 기록의 표현을 고정한다. JSON에는 NaN/Infinity 숫자를 쓰지 않는다.
+        raw_values = [str(value) for value in values] if received else None
+        raw_line = len(raw_rows) + 2 if received else None
+        if received:
+            raw_rows.append((row[0], *raw_values, row[5]))
+        clean, reasons = preprocess_observation(raw_values or [], received)
+        clean_line = len(clean_rows) + 2 if clean is not None else None
+        retained = {**meta, "schema_version": 2, "source_row_index": index, "raw_csv_file": f"{meta['room_id']}.raw.csv",
+                    "raw_csv_line": raw_line, "audit_file": f"{meta['room_id']}.observations.jsonl",
+                    "observation_policy": OBSERVATION_POLICY,
+                    "sensor_faults": sorted({fault["kind"] for fault in active}), "fault_ids": [fault["id"] for fault in active]}
+        audit.append({"metadata": retained, "observed_at": row[0], "received": received,
+            "physical_values": list(row[1:5]),
+            "raw_values": raw_values, "clean_values": clean, "clean_csv_line": clean_line,
+            "status": "accepted" if clean is not None else "excluded", "reasons": reasons})
+        if clean is not None:
+            clean_rows.append((row[0], *clean, row[5]))
+            clean_metadata.append({**retained, "row_index": len(clean_rows) - 1, "csv_line": clean_line})
+    return raw_rows, clean_rows, clean_metadata, audit, faults
+
+
+def validate_observation_exports(raw_rows, clean_rows, metadata, audit, step_seconds):
+    """감사 기록에서 같은 처리를 재계산하고 제외·누락 시각의 행 대응을 검증한다."""
+    raw_index = clean_index = 0
+    stamps, ids = [], set()
+    for index, item in enumerate(audit):
+        meta, stamp = item["metadata"], item["observed_at"]
+        parsed = datetime.fromisoformat(stamp)
+        if (parsed.tzinfo is None or meta["source_row_index"] != index or meta["row_id"] in ids
+                or meta["schema_version"] != 2 or meta["observation_policy"] != OBSERVATION_POLICY
+                or type(item["received"]) is not bool or type(meta["virtual_people"]) is not int
+                or meta["virtual_people"] < 0 or meta["synthetic"] is not True):
+            raise ValueError("관측 ID·시각·감사 정책이 일치하지 않습니다.")
+        ids.add(meta["row_id"])
+        stamps.append(parsed.astimezone(timezone.utc))
+        truth = int(meta["virtual_people"] > 0)
+        if item["received"]:
+            if raw_index >= len(raw_rows) or len(item["raw_values"]) != 4:
+                raise ValueError("원시 CSV의 수신 행이 없습니다.")
+            row = raw_rows[raw_index]
+            if (row != (stamp, *item["raw_values"], truth) or meta["raw_csv_line"] != raw_index + 2):
+                raise ValueError("원시 CSV와 관측 감사의 값·행 번호가 다릅니다.")
+            raw_index += 1
+        elif item["raw_values"] is not None or meta["raw_csv_line"] is not None:
+            raise ValueError("수집 중단을 실측 행으로 저장할 수 없습니다.")
+        clean, reasons = preprocess_observation(item["raw_values"] or [], item["received"])
+        if (item["clean_values"] != clean or item["reasons"] != reasons
+                or item["status"] != ("accepted" if clean is not None else "excluded")):
+            raise ValueError("재생과 학습의 전처리 결과가 다릅니다.")
+        if clean is None:
+            if item["clean_csv_line"] is not None:
+                raise ValueError("불능 관측이 학습 행에 포함됐습니다.")
+            continue
+        if clean_index >= len(clean_rows) or clean_index >= len(metadata):
+            raise ValueError("정제 CSV의 행이 없습니다.")
+        expected_meta = {**meta, "row_index": clean_index, "csv_line": clean_index + 2}
+        if (clean_rows[clean_index] != (stamp, *clean, truth) or metadata[clean_index] != expected_meta
+                or item["clean_csv_line"] != clean_index + 2):
+            raise ValueError("정제 CSV·정답·감사 행의 대응이 다릅니다.")
+        clean_index += 1
+    if (raw_index != len(raw_rows) or clean_index != len(clean_rows) or clean_index != len(metadata)
+            or any((b - a).total_seconds() != step_seconds for a, b in zip(stamps, stamps[1:]))):
+        raise ValueError("원시/정제/감사의 행수 또는 관측 간격이 다릅니다.")
+    return {"scheduled_rows": len(audit), "received_rows": raw_index, "accepted_rows": clean_index,
+        "excluded_rows": len(audit) - clean_index, "collection_interruption_rows": len(audit) - raw_index,
+        "accepted_fraction": clean_index / len(audit) if audit else None,
+        "exclusion_reasons": dict(Counter(reason for item in audit for reason in item["reasons"])),
+        "fault_rows": dict(Counter(kind for item in audit for kind in item["metadata"]["sensor_faults"])),
+        "raw": sensor_diagnostics(raw_rows, step_seconds), "clean": sensor_diagnostics(clean_rows, step_seconds),
+        "policy": OBSERVATION_POLICY, "imputation": "none", "clipping_applied": False,
+        "valid_anomalies": "finite in-envelope freeze/spike/drift retained; tags never used as model features"}
 
 
 def sensor_windows(values, stamps, days, cadence, stride=1, sample_every=1, size=8):
@@ -639,10 +896,19 @@ def read_export(csv_path, meta_path):
     return rows, metadata
 
 
+def read_raw_csv(content):
+    reader = csv.DictReader(content.splitlines())
+    if tuple(reader.fieldnames or ()) != COLUMNS:
+        raise ValueError("원시 관측 CSV의 6열 계약이 다릅니다.")
+    return [(row["date"], *(row[name] for name in SENSORS), int(row["Occupancy"])) for row in reader]
+
+
 def quality_markdown(report, profile, config):
-    lines = ["# 합성 센서 생성 품질", "", f"검사 통과: {report['passed']} · 모드: {config.mode} · seed: {config.seed}", "",
-             "모든 정답은 가상 인원수에서만 계산했습니다. 실제 정답이나 실제 시설의 분류 성능을 뜻하지 않습니다.", "",
-             "| 방 | 보정 출처 | 행수 | 가상 사용 비율 | 평균 CO₂ (ppm) | 원본 센서 행 복제 |", "|---|---|---|---|---|---|"]
+    lines = ["# 합성 센서 생성 품질", "", f"구조 검사 통과: {report['passed']} · 생활 모드: {config.mode} · seed: {config.seed}", "",
+             f"보정 범위: {profile['provenance']['role']}. fit-only일 때 실제 검증 비율 {config.validation_ratio}와 공통 날짜·1시간 경계를 사용합니다.", "",
+             "통과는 스키마·출처·독립 가상 정답·복제 방지·전처리 일관성의 제한된 검사입니다. 현실성 인증이나 분류 정확도 평가가 아닙니다. 아래 동역학 통계는 오류를 더하기 전 물리 궤적이며 원시/정제 관측 통계와 구분합니다.", "",
+             "모든 정답은 가상 인원수에서만 계산했습니다. 센서 오류로 정답이 바뀌지 않습니다.", "",
+             "| 방 | 보정 출처 | 정제 행수 | 물리 궤적 사용 비율 | 물리 평균 CO₂ (ppm) | 원본 센서 행 복제 |", "|---|---|---|---|---|---|"]
     for room, item in report["rooms"].items():
         lines.append(f"| {room} | {profile['room_traits'][room]['calibration_source']} | {item['rows']} | {item['occupancy_fraction']:.1%} | {item['synthetic']['mean'][3]:.1f} | {item['exact_sensor_rows']} |")
     lines += ["", "사건 발생 건수: " + ", ".join(f"{kind} {count}" for kind, count in sorted(report["actual_exception_counts"].items())), "",
@@ -652,44 +918,135 @@ def quality_markdown(report, profile, config):
               "Graz는 UTC에서 Europe/Vienna로 변환했습니다. legacy는 시간대를 확인할 수 없어 원래 현지 시각 그대로 분석했습니다. 생성 시각은 설정한 시간대의 offset을 포함하며 일광절약시간은 UTC 경과로 처리합니다.", "",
               f"가정: 방 기준 부피 {config.volume_m3}m³, 최대 가상 인원 {config.capacity}명, 외기·날씨·냉난방·전등 지연 및 사건 빈도. 보정된 사무실의 실제 부피와 전등 상태는 식별되지 않습니다. 큰 강의실과 다른 계절의 현실성을 보장하지 않습니다. 예외 집중 모드의 강제 비율은 관측 발생률이 아닙니다.", "",
               "manifest.json의 전체 방 단위 분할 권고를 사용하면 날짜·사건·이웃 행이 분할을 넘지 않습니다. 방 3개 미만은 train_only로만 표시합니다. 방마다 보정 출처가 다를 수 있어 이 분할은 출처 차이도 포함합니다. 자동 학습·평가·원본 병합은 수행하지 않았습니다.", ""]
+    if report.get("observation_schema") == 2:
+        lines += ["## 원시 관측과 정제", "",
+            f"관측 모드: {config.observation_mode}. 일반 모드의 유형·방·날짜별 확률 {config.fault_probability:.1%}, 지속 시간 {config.fault_min_minutes}~{config.fault_max_minutes}분은 가정입니다. 스파이크는 1~3표본, 스트레스는 각 방에 오류 6종을 강제 배치합니다. 측정된 장애율이 아닙니다.", "",
+            "센서 해상도는 선택된 보정 행의 98% 이상이 정렬되는 격자로 추정하며 근거가 없으면 0.001을 가정합니다. 정체 구간은 관측 사실이고 고장·전처리 값 채움 중 원인을 단정하지 않습니다.", "",
+            "*.raw.csv는 수신된 원값·원시각만, *.observations.jsonl은 stable ID·원시/정제 행번호·가상 정답·오류 episode/기간·처리 전후값·제외 사유를 저장합니다. 수집 중단은 원시 CSV에 행을 만들지 않습니다. *.csv와 *.metadata.jsonl에는 같은 정책으로 통과한 행만 대응됩니다.", "",
+            "보간·대체·클리핑을 하지 않습니다. 결측·비유한·관측 한계 밖 값은 추론/학습에서 제외합니다. 유효 범위의 고정값·급등락·편향 및 생활 예외는 유지하며 오류 태그·인원수·정답은 피처에 넣지 않습니다.", ""]
+        for room, item in report["observation"].items():
+            lines.append(f"- {room} ({item['partition']}): 예정 {item['scheduled_rows']} / 수신 {item['received_rows']} / 정제 {item['accepted_rows']} / 제외 {item['excluded_rows']}행, 수집 중단 {item['collection_interruption_rows']}행. 제외 사유 {serialized(item['exclusion_reasons'])}")
+        lines += ["", "quality.json의 observation.raw/clean에는 실제 파일의 결측·비유한·중복/역전·시간 공백·정체·경계값 건수, partition_events에는 파티션별 유형의 예정/정제 행수가 있습니다. boundary_hits는 경계에 닿은 관측 수이며 클리핑 처리 횟수가 아닙니다.", "",
+            "생활 예외 집중과 센서 스트레스는 서로 다른 설정입니다. 각 방의 사건은 별도 난수·시각·강도를 가지며 방 전체를 분할합니다. 희귀 사건을 우선 뽑은 재생 지표도 자연 발생 비율의 성능을 뜻하지 않습니다.", ""]
     return "\n".join(lines)
 
 
-def generate(config, output_root=None, root=ROOT):
-    records, provenance = read_training(root)
+def generate(config, output_root=None, root=ROOT, *, reuse=False, recover_incomplete=False):
+    records, provenance = read_training(root, config.validation_ratio if config.calibration_scope == "fit_only" else None)
     profile = calibration(records, provenance)
     code_hash = digest(Path(__file__))
     identity = hashlib.sha256(serialized({"config": asdict(config), "profile": profile["profile_hash"], "code": code_hash}).encode()).hexdigest()[:12]
     generation_id = f"{VERSION}-{identity}"
     target = Path(output_root or root / "data/simulated") / generation_id
+    if reuse and (target.is_symlink() or target.parent.is_symlink()):
+        raise ValueError("생성 출력의 심볼릭 링크는 허용하지 않습니다.")
+    if target.exists() and reuse:
+        if (target / "INCOMPLETE").exists():
+            if not recover_incomplete:
+                raise ValueError("미완료 산출물은 보존했습니다. 실패한 생성 작업의 재시도 또는 새 seed를 사용하세요.")
+            archive = target.parent / ".incomplete" / f"{generation_id}-{uuid.uuid4().hex[:12]}"
+            archive.parent.mkdir(parents=True, exist_ok=True)
+            if target.is_symlink() or not archive.resolve().is_relative_to(target.parent.resolve()):
+                raise ValueError("미완료 산출물 보존 경로를 확인하세요.")
+            target.rename(archive)
+        else:
+            manifest = json.loads((target / "manifest.json").read_text(encoding="utf-8"))
+            if (manifest["generation_id"] != generation_id or manifest["profile_hash"] != profile["profile_hash"]
+                    or manifest["generator_code_sha256"] != code_hash or manifest["config"] != asdict(config)
+                    or manifest["quality_passed"] is not True or len(manifest["files"]) != config.rooms):
+                raise ValueError("기존 완료 산출물의 출처·설정·품질이 다릅니다. 덮어쓰지 않습니다.")
+            hashes = dict(manifest["artifacts"])
+            if set(hashes) != {"profile.json", "quality.json", "quality.md"}:
+                raise ValueError("기존 산출물의 보고서 목록이 다릅니다.")
+            for name, entry in manifest["files"].items():
+                if name != f"{entry['room_id']}.csv" or entry["metadata"] != f"{entry['room_id']}.metadata.jsonl":
+                    raise ValueError("기존 산출물의 파일 연결이 다릅니다.")
+                hashes.update({name: entry["sha256"], entry["metadata"]: entry["metadata_sha256"]})
+                if manifest.get("observation_schema") == 2:
+                    hashes.update({entry["raw_file"]: entry["raw_sha256"], entry["audit_file"]: entry["audit_sha256"]})
+            for name, expected in hashes.items():
+                file = target / name
+                if "/" in name or "\\" in name or file.is_symlink() or file.resolve().parent != target.resolve() or digest(file) != expected:
+                    raise ValueError("기존 산출물 해시가 다릅니다. 손상 파일을 보존하고 새 seed를 사용하세요.")
+            report = json.loads((target / "quality.json").read_text(encoding="utf-8"))
+            if report["passed"] is not True or report["errors"]:
+                raise ValueError("기존 생성물의 품질이 통과 상태가 아닙니다.")
+            if (digest(root / "data/training_dataset.csv") != provenance["canonical_sha256"]
+                    or digest(root / "data/dataset_sources.json") != provenance["source_metadata_sha256"]
+                    or digest(Path(__file__)) != code_hash):
+                raise ValueError("산출물 검증 도중 보정 입력 또는 코드가 바뀌었습니다.")
+            return target, {**report, "_reused_output": True}
     target.mkdir(parents=True, exist_ok=False)
     (target / "INCOMPLETE").write_text("생성 중, manifest와 quality의 passed를 확인하세요.\n", encoding="utf-8")
-    rows_by_room, metadata_by_room, events_by_room, traits = {}, {}, {}, {}
+    rows_by_room, metadata_by_room, events_by_room, traits, observation_reports = {}, {}, {}, {}, {}
     stamps = timeline(config)
     manifest = {"generation_id": generation_id, "generator_version": VERSION, "generator_code_sha256": code_hash, "config": asdict(config),
                 "profile_hash": profile["profile_hash"], "provenance": provenance, "files": {}, "events": {},
                 "runtime": {"python": platform.python_version(), "numpy": np.__version__, "scipy": scipy.__version__},
                 "suggested_split": {}, "split_policy": "whole room; date/event groups stay within room; no random adjacent-row split",
-                "synthetic": True, "automatic_training_merge": False}
+                "synthetic": True, "automatic_training_merge": False,
+                "observation_schema": 2, "observation_policy": OBSERVATION_POLICY, "sensor_faults": {}}
     for room_index in range(config.rooms):
         room = f"room_{room_index + 1:02}"
         rows, metadata, events, room_traits = generate_room(config, profile, room_index, stamps)
+        raw_rows, clean_rows, clean_meta, audit, faults = observe_room(
+            rows, metadata, config, profile["sources"][room_traits["calibration_source"]], room_index)
         csv_path, meta_path = target / f"{room}.csv", target / f"{room}.metadata.jsonl"
-        with csv_path.open("x", encoding="utf-8", newline="") as stream:
-            writer = csv.writer(stream, lineterminator="\n")
-            writer.writerow(COLUMNS)
-            writer.writerows(rows)
-        meta_path.write_text("".join(serialized(item) + "\n" for item in metadata), encoding="utf-8")
+        raw_path, audit_path = target / f"{room}.raw.csv", target / f"{room}.observations.jsonl"
+        for path, output_rows in ((csv_path, clean_rows), (raw_path, raw_rows)):
+            with path.open("x", encoding="utf-8", newline="") as stream:
+                writer = csv.writer(stream, lineterminator="\n")
+                writer.writerow(COLUMNS)
+                writer.writerows(output_rows)
+        meta_path.write_text("".join(serialized(item) + "\n" for item in clean_meta), encoding="utf-8")
+        audit_path.write_text("".join(serialized(item) + "\n" for item in audit), encoding="utf-8")
         partition = ("train" if room_index % 3 == 0 else "validation" if room_index % 3 == 1 else "test") if config.rooms >= 3 else "train_only"
         manifest["suggested_split"][room] = partition
-        manifest["files"][csv_path.name] = {"sha256": digest(csv_path), "rows": len(rows), "metadata": meta_path.name,
-            "metadata_sha256": digest(meta_path), "room_id": room, "partition": partition}
+        manifest["files"][csv_path.name] = {"sha256": digest(csv_path), "rows": len(clean_rows), "metadata": meta_path.name,
+            "metadata_sha256": digest(meta_path), "room_id": room, "partition": partition,
+            "raw_file": raw_path.name, "raw_sha256": digest(raw_path), "raw_rows": len(raw_rows),
+            "audit_file": audit_path.name, "audit_sha256": digest(audit_path), "scheduled_rows": len(rows)}
         manifest["events"][room] = events
-        # 품질 검사는 메모리 원본이 아니라 실제 기록한 CSV/메타데이터를 다시 읽어 수행한다.
-        rows_by_room[room], metadata_by_room[room] = read_export(csv_path, meta_path)
+        manifest["sensor_faults"][room] = faults
+        # 실제 기록한 원시/정제/감사 파일을 다시 읽고 동일 전처리의 결과를 대조한다.
+        exported, exported_meta = read_export(csv_path, meta_path)
+        exported_audit = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+        observation_reports[room] = validate_observation_exports(
+            read_raw_csv(raw_path.read_text(encoding="utf-8")), exported, exported_meta, exported_audit, config.step_seconds)
+        if not exported:
+            raise ValueError(f"{room}: 유효한 관측이 없습니다. 원시 파일을 보존했습니다.")
+        observation_reports[room]["fault_episodes"] = faults
+        observation_reports[room]["accepted_fault_rows"] = dict(Counter(kind for item in exported_meta for kind in item["sensor_faults"]))
+        observation_reports[room]["events"] = {kind: {
+            "scheduled_rows": sum(kind in item["metadata"]["events"] for item in exported_audit),
+            "accepted_rows": sum(kind in item["events"] for item in exported_meta)} for kind in EVENT_KINDS}
+        observation_reports[room]["partition"] = partition
+        rows_by_room[room] = [(item["observed_at"], *item["physical_values"], int(item["metadata"]["virtual_people"] > 0))
+                              for item in exported_audit]
+        metadata_by_room[room] = [item["metadata"] for item in exported_audit]
         events_by_room[room], traits[room] = events, room_traits
     profile["room_traits"] = traits
     report = quality(rows_by_room, metadata_by_room, events_by_room, records, profile, config)
+    report.update(observation_schema=2, observation=observation_reports,
+        passed_scope="structure, provenance, virtual truth, copy guards and explicit preprocessing; not realism or classifier accuracy",
+        dynamics_scope="latent physical trace before observation faults; observation.raw/clean describe actual exported sensor files",
+        frequency={"life_events": "forced per-room coverage, not natural prevalence" if config.mode == "exceptions" else "assumed probability per room/day",
+                   "sensor_faults": "each kind once per room, not natural prevalence" if config.observation_mode == "stress"
+                       else "disabled" if config.observation_mode == "off" else "assumed independent probability per kind/room/day",
+                   "fault_probability_assumed": config.fault_probability,
+                   "duration_minutes_assumed": [config.fault_min_minutes, config.fault_max_minutes]})
+    for room, item in report["rooms"].items():
+        item["physical_rows"] = item["rows"]
+        item["rows"] = observation_reports[room]["accepted_rows"]
+        item["physical_diagnostics"] = sensor_diagnostics(rows_by_room[room], config.step_seconds)
+    report["partition_events"] = {part: {kind: {
+        "scheduled_rows": sum(item["events"][kind]["scheduled_rows"] for item in observation_reports.values() if item["partition"] == part),
+        "accepted_rows": sum(item["events"][kind]["accepted_rows"] for item in observation_reports.values() if item["partition"] == part)}
+        for kind in EVENT_KINDS} for part in sorted(set(manifest["suggested_split"].values()))}
+    report["partition_faults"] = {part: {kind: {
+        "scheduled_rows": sum(item["fault_rows"].get(kind, 0) for item in observation_reports.values() if item["partition"] == part),
+        "accepted_rows": sum(item["accepted_fault_rows"].get(kind, 0) for item in observation_reports.values() if item["partition"] == part)}
+        for kind in FAULT_KINDS} for part in sorted(set(manifest["suggested_split"].values()))}
     manifest["actual_exception_counts"] = report["actual_exception_counts"]
     manifest["quality_passed"] = report["passed"]
     for name, content in (("profile.json", profile), ("quality.json", report)):
@@ -710,7 +1067,51 @@ def generate(config, output_root=None, root=ROOT):
     return target, report
 
 
+def write_generation_job(path, record):
+    descriptor, temporary = tempfile.mkstemp(prefix=".generation-", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(serialized(record) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        Path(temporary).replace(path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def run_generation_job(path):
+    from filelock import FileLock
+    path = Path(path)
+    with FileLock(str(path) + ".lock", timeout=10):
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record.update(status="running", pid=os.getpid(), error=None)
+        write_generation_job(path, record)
+    try:
+        root, output = Path(record["root"]), Path(record["output_root"])
+        if (digest(Path(__file__)) != record["script_sha256"]
+                or digest(root / "data/training_dataset.csv") != record["training_sha256"]
+                or digest(root / "data/dataset_sources.json") != record["metadata_sha256"]):
+            raise ValueError("접수 후 생성 코드·보정 입력이 바뀌었습니다. 새 작업으로 다시 접수하세요.")
+        output.mkdir(parents=True, exist_ok=True)
+        with FileLock(output / ".generation.lock", timeout=30):
+            target, report = generate(Config(**record["config"], calibration_scope="fit_only"), output, root,
+                                      reuse=True, recover_incomplete=record.get("recover_incomplete", False))
+        record.update(status="completed", generation_id=target.name, quality_passed=report["passed"],
+                      reused_output=report.get("_reused_output", False), storage="CLASSROOM_STATE_DIR/simulated")
+    except Exception as error:
+        record.update(status="failed", error=str(error))
+    with FileLock(str(path) + ".lock", timeout=10):
+        write_generation_job(path, record)
+    return record
+
+
 if __name__ == "__main__":
-    target, report = generate(Config.environment(), Path(os.environ.get("SIM_OUTPUT_ROOT", ROOT / "data/simulated")))
-    print(serialized({"output": str(target), "passed": report["passed"], "rows": sum(r["rows"] for r in report["rooms"].values()),
-                      "events": report["actual_exception_counts"]}))
+    parser = argparse.ArgumentParser(description="독립 센서 CSV 생성 또는 웹 생성 작업 실행")
+    parser.add_argument("--generation-job", type=Path)
+    arguments = parser.parse_args()
+    if arguments.generation_job:
+        print(serialized(run_generation_job(arguments.generation_job)))
+    else:
+        target, report = generate(Config.environment(), Path(os.environ.get("SIM_OUTPUT_ROOT", ROOT / "data/simulated")))
+        print(serialized({"output": str(target), "passed": report["passed"], "rows": sum(r["rows"] for r in report["rooms"].values()),
+                          "events": report["actual_exception_counts"]}))

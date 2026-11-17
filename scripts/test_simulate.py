@@ -11,7 +11,8 @@ from pathlib import Path
 import numpy as np
 
 from scripts.simulate import (COLUMNS, Config, calibration, digest, generate, quality, read_training,
-                              sensor_step, timeline, transitions)
+                              FAULT_KINDS, EVENT_KINDS, generate_room, observe_room, preprocess_observation,
+                              read_export, read_raw_csv, validate_observation_exports, sensor_step, timeline, transitions)
 
 
 def fixture(root, auxiliary=False):
@@ -165,6 +166,64 @@ class SimulatorTests(unittest.TestCase):
             report = quality({"room_01": rows}, {"room_01": meta}, {"room_01": []}, self.records, self.profile, cfg)
             self.assertFalse(report["passed"])
             self.assertTrue(any("복사" in error or "복제" in error for error in report["errors"]))
+
+    def test_dirty_observations_are_reproducible_audited_and_never_change_virtual_truth(self):
+        cfg = Config(rooms=1, days=7, step_seconds=300, observation_mode="stress", fault_min_minutes=30, fault_max_minutes=60)
+        path, report = generate(cfg, self.root / "dirty", self.root)
+        raw = read_raw_csv((path / "room_01.raw.csv").read_text())
+        clean, meta = read_export(path / "room_01.csv", path / "room_01.metadata.jsonl")
+        audit = [json.loads(line) for line in (path / "room_01.observations.jsonl").read_text().splitlines()]
+        summary = validate_observation_exports(raw, clean, meta, audit, 300)
+        self.assertEqual(set(summary["fault_rows"]), set(FAULT_KINDS))
+        self.assertGreater(summary["collection_interruption_rows"], 0)
+        self.assertGreater(summary["excluded_rows"], summary["collection_interruption_rows"])
+        self.assertGreater(summary["clean"]["gap_pairs"], 0)
+        self.assertTrue(any(item["status"] == "excluded" and item["metadata"]["virtual_people"] == 0 for item in audit))
+        self.assertTrue(any(item["sensor_faults"] and row[-1] == 0 for item, row in zip(meta, clean)))
+        self.assertTrue(all(np.isfinite(row[1:5]).all() for row in clean))
+        self.assertTrue(any("freeze" in item["sensor_faults"] for item in meta))
+        self.assertTrue(any("drift" in item["sensor_faults"] for item in meta))
+        self.assertTrue(report["passed"])
+        self.assertFalse(report["realism_guarantee"])
+        self.assertEqual(report["rooms"]["room_01"]["rows"], len(clean))
+        self.assertEqual(report["observation"]["room_01"]["raw"], summary["raw"])
+        physical, truth_meta, _, traits = generate_room(cfg, self.profile, 0, timeline(cfg))
+        off = generate_room(replace(cfg, observation_mode="off"), self.profile, 0, timeline(cfg))
+        self.assertEqual(physical, off[0])
+        self.assertEqual([item["virtual_people"] for item in truth_meta], [item["metadata"]["virtual_people"] for item in audit])
+        source = self.profile["sources"][traits["calibration_source"]]
+        first = observe_room(physical, truth_meta, cfg, source, 0)
+        self.assertEqual(first, observe_room(physical, truth_meta, cfg, source, 0))
+        self.assertNotEqual(first[0], observe_room(physical, truth_meta, replace(cfg, seed=cfg.seed + 1), source, 0)[0])
+        audit[0]["clean_values"][0] += 1
+        with self.assertRaisesRegex(ValueError, "전처리"):
+            validate_observation_exports(raw, clean, meta, audit, 300)
+
+    def test_preprocessing_excludes_only_explicitly_unusable_values_without_imputation(self):
+        self.assertEqual(preprocess_observation([21, 40, 0, 430]), ([21., 40., 0., 430.], []))
+        for values, reason in ((["", 40, 0, 430], "missing"), ([21, "nan", 0, 430], "nonfinite"),
+                               ([21, 40, "inf", 430], "nonfinite"), ([21, 40, -1, 430], "outside_envelope")):
+            result, reasons = preprocess_observation(values)
+            self.assertIsNone(result)
+            self.assertIn(reason, reasons[0])
+        self.assertEqual(preprocess_observation([], False), (None, ["collection_interruption"]))
+        self.assertEqual(preprocess_observation([21, 40, 900, 900])[1], [])
+
+    def test_every_room_has_independent_exception_episodes_and_fit_observation_statistics(self):
+        cfg = Config(rooms=3, days=7, step_seconds=300)
+        episode_ids, sensor_traces = set(), []
+        for room_index in range(3):
+            rows, metadata, events, _ = generate_room(cfg, self.profile, room_index, timeline(cfg))
+            special = [event for event in events if event["kind"] in EVENT_KINDS]
+            self.assertEqual({event["kind"] for event in special}, set(EVENT_KINDS))
+            self.assertFalse(episode_ids & {event["id"] for event in special})
+            episode_ids.update(event["id"] for event in special)
+            self.assertTrue(all(any(event["id"] in item["event_ids"] for item in metadata) for event in special))
+            sensor_traces.append([row[1:5] for row in rows])
+        self.assertFalse(np.array_equal(sensor_traces[0], sensor_traces[1]))
+        stats = self.profile["sources"]["legacy"]["observation_calibration"]
+        self.assertEqual(stats["measured"]["rows"], len(self.records["legacy"]))
+        self.assertIn("assumptions", stats["fault_rates"])
 
 
 if __name__ == "__main__":
