@@ -18,18 +18,40 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from filelock import FileLock, Timeout
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from swagger_ui_bundle import swagger_ui_path
 
 from models.model import (FEATURES, REPORTS_DIR, ROOT, WEIGHTS_DIR, SensorInput, current_version,
                           load_model, model_versions, predict_one, valid_version, weight_path)
 from models.model import pair_fingerprint
 from models.train import (JOBS_DIR, SPLIT_STRATEGY, TrainingConfig, load_dataset, training_input_limits,
-                          training_plan, write_json)
+                          synthetic_catalog, training_plan, write_json)
 from scripts.runtime_logging import RuntimeLogger
 from backend.classrooms import ClassroomService, MeasurementInput, SimulationControl, SourceControl
+from backend.pipeline import PipelineStore, ReplayConfig, FeedbackConfig
 
 API_STARTED_AT = datetime.now(timezone.utc)
+
+
+class FeedbackGeneration(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    rooms: int = Field(default=3, ge=3, le=12)
+    days: int = Field(default=7, ge=7, le=31)
+    step_seconds: Literal[30, 60, 300] = 60
+    seed: int = Field(default=20261112, ge=0, le=2147483647)
+    validation_ratio: float = Field(default=.2, ge=.1, le=.4)
+    start_date: str = "2026-11-09"
+    timezone: str = "Asia/Seoul"
+    observation_mode: Literal["off", "normal", "stress"] = "normal"
+    fault_probability: float = Field(default=.03, ge=0, le=1, description="오류 유형·방·날짜별 가정 확률, 측정된 고장률 아님")
+    fault_min_minutes: int = Field(default=30, ge=5, le=2880)
+    fault_max_minutes: int = Field(default=180, ge=5, le=2880)
+
+
+class CandidateModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    model_version: str = Field(pattern=r"^v[1-9][0-9]*$")
+    mode: Literal["with_light", "without_light"] = "with_light"
 
 
 class Prediction(BaseModel):
@@ -184,6 +206,7 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
                     pair = get_pair(application)
                     model = pair["with_light"]
                     return {"prediction": predict_one(model, values), "features": model.metadata["features"],
+                            "time_feature_policy": model.metadata.get("time_feature_policy"),
                             "threshold": model.metadata["threshold"], "fingerprint": pair["fingerprint"]}
                 try:
                     service = ClassroomService(state_dir or Path(os.environ.get("CLASSROOM_STATE_DIR", ROOT / "state")),
@@ -374,7 +397,8 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
         model = pair[model_key]
         application.state.runtime_logger.inference(request_id=request.state.request_id, sensors=sensors.model_dump(),
             version=model.metadata["version"], mode=model_key, features=model.metadata["features"],
-            threshold=model.metadata["threshold"], fingerprint=pair["fingerprint"], prediction=result)
+            threshold=model.metadata["threshold"], fingerprint=pair["fingerprint"], prediction=result,
+            time_feature_policy=model.metadata.get("time_feature_policy"))
         return result
 
     @application.post("/compare", response_model=dict[str, Prediction], responses=errors,
@@ -386,11 +410,17 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
             model = pair[mode]
             application.state.runtime_logger.inference(request_id=request.state.request_id, sensors=sensors.model_dump(),
                 version=model.metadata["version"], mode=mode, features=model.metadata["features"],
-                threshold=model.metadata["threshold"], fingerprint=pair["fingerprint"], prediction=result)
+                threshold=model.metadata["threshold"], fingerprint=pair["fingerprint"], prediction=result,
+                time_feature_policy=model.metadata.get("time_feature_policy"))
         return results
 
     @application.get("/training/options", summary="기본 설정과 데이터 피처 분포", tags=["학습"])
-    def training_options(validation_ratio: float = Query(default=0.2, ge=0.1, le=0.4)):
+    def training_options(validation_ratio: float = Query(default=0.2, ge=0.1, le=0.4),
+                         synthetic_generation: str | None = Query(default=None, pattern=r"^dynamic-sensors-v1-[0-9a-f]{12}$"),
+                         synthetic_ratio: float = Query(default=0.25, gt=0, le=1),
+                         shared_room_split: bool = False, seed: int = Query(default=42, ge=0, le=2147483647),
+                         pipeline_dataset: str | None = Query(default=None, pattern=r"^[0-9a-f]{64}$"),
+                         pipeline_ratio: float = Query(default=.25, gt=0, le=1)):
         paths = [ROOT / "data" / name for name in ("training_dataset.csv", "test_dataset.csv")]
         metadata = ROOT / "data/dataset_sources.json"
         if metadata.is_file():
@@ -416,8 +446,13 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
                                          "split_strategy": SPLIT_STRATEGY,
                                          "config_schema": TrainingConfig.model_json_schema()}
             application.state.catalog_signature = signature
+        config = TrainingConfig(validation_ratio=validation_ratio, synthetic_generation=synthetic_generation,
+                                synthetic_ratio=synthetic_ratio, shared_room_split=shared_room_split, seed=seed,
+                                pipeline_dataset=pipeline_dataset, pipeline_ratio=pipeline_ratio)
+        plan = training_plan(*application.state.catalog_data, validation_ratio, config, ROOT)
         return {**application.state.catalog,
-                "data_plan": training_plan(*application.state.catalog_data, validation_ratio)}
+                "synthetic_datasets": synthetic_catalog(application.state.catalog_data[0], ROOT, verified=plan.get("synthetic")),
+                "data_plan": plan}
 
     @application.get("/training/jobs", summary="학습 작업 상태와 이력", tags=["학습"])
     def jobs():
@@ -441,11 +476,16 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
                 if active_id:
                     raise HTTPException(409, f"진행 중인 학습이 있습니다: {active_id}")
                 try:
-                    plan = training_options(config.validation_ratio)["data_plan"]
+                    plan = training_options(config.validation_ratio, config.synthetic_generation,
+                                            config.synthetic_ratio, config.shared_room_split, config.seed,
+                                            config.pipeline_dataset, config.pipeline_ratio)["data_plan"]
                 except (OSError, ValueError, KeyError) as error:
                     raise HTTPException(400, f"학습 자료를 확인하세요: {error}") from error
                 if not plan["ready"]:
                     raise HTTPException(400, " / ".join(plan["errors"]))
+                expected = request.headers.get("X-Data-Plan-SHA256")
+                if expected and expected != plan["fingerprint"]:
+                    raise HTTPException(409, "확인한 데이터 구성이 바뀌었습니다. 데이터플랜을 다시 확인하세요.")
                 job_id = uuid.uuid4().hex
                 logger = application.state.runtime_logger
                 path = job_path(job_id)
@@ -463,7 +503,8 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
                     "log_run_id": logger.run_id, "log_root": str(logger.root), "request_id": request.state.request_id,
                 }
                 write_json(path, record)
-                logger.write("model", "training", event="queued", job_id=job_id, request_id=request.state.request_id)
+                logger.write("model", "training", event="queued", job_id=job_id, request_id=request.state.request_id,
+                             data_plan=plan)
                 try:
                     worker_command = [sys.executable, "-m", "models.train", "--job-id", job_id]
                     with (JOBS_DIR / f"{job_id}.log").open("wb") as output:
@@ -514,6 +555,59 @@ def create_app(model_path: Path | None = None, *, log_root: Path | None = None, 
         return schema
 
     application.openapi = openapi
+    def pipeline():
+        return PipelineStore(ROOT, state_dir=state_dir, logger=application.state.runtime_logger)
+
+    def pipeline_call(method, *args, **kwargs):
+        try:
+            return method(*args, **kwargs)
+        except Timeout as error:
+            raise HTTPException(409, "이 실행의 다른 요청이 처리 중입니다.") from error
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            raise HTTPException(400, str(error)) from error
+
+    @application.get("/pipeline", tags=["개선 파이프라인"], summary="고정 관측 실행과 확정 데이터셋")
+    def pipeline_options():
+        store = pipeline()
+        return {"runs": store.runs(), "datasets": store.datasets(), "generation_jobs": store.generation_jobs(),
+                "note": "가상 현장의 개발용 정답입니다. 기존 무정답 로그·최종 실제 test는 개선 입력에서 제외합니다."}
+
+    @application.post("/pipeline/generations", status_code=202, tags=["개선 파이프라인"], summary="fit-only 생성 작업 접수, 분류 학습 없음")
+    def pipeline_generate(config: FeedbackGeneration):
+        return pipeline_call(pipeline().queue_generation, config.model_dump())
+
+    @application.get("/pipeline/generations/{job_id}", tags=["개선 파이프라인"], summary="생성 작업 상태·완료·오류 조회")
+    def pipeline_generation_job(job_id: str):
+        return pipeline_call(pipeline().generation_job, job_id)
+
+    @application.post("/pipeline/runs", tags=["개선 파이프라인"], summary="모델과 관측 묶음 고정, 예측은 별도 시작")
+    def pipeline_create(config: ReplayConfig):
+        return pipeline_call(pipeline().create_run, config)
+
+    @application.get("/pipeline/runs/{run_id}", tags=["개선 파이프라인"], summary="진행 상태·상황별 지표·오판")
+    def pipeline_analysis(run_id: str):
+        return pipeline_call(pipeline().analysis, run_id)
+
+    @application.post("/pipeline/runs/{run_id}/step", tags=["개선 파이프라인"], summary="고정 모델로 관측 묶음 예측 진행")
+    def pipeline_step(run_id: str, limit: int = Query(default=64, ge=1, le=256)):
+        return pipeline_call(pipeline().process, run_id, limit)
+
+    @application.post("/pipeline/runs/{run_id}/control", tags=["개선 파이프라인"], summary="예측 중지·재개")
+    def pipeline_control(run_id: str, action: Literal["cancel", "resume"]):
+        return pipeline_call(pipeline().control, run_id, action)
+
+    @application.post("/pipeline/runs/{run_id}/dataset", tags=["개선 파이프라인"], summary="학습 파티션의 정답 관측만 데이터셋으로 확정")
+    def pipeline_dataset(run_id: str, config: FeedbackConfig):
+        return pipeline_call(pipeline().create_dataset, run_id, config)
+
+    @application.post("/pipeline/runs/{run_id}/compare", tags=["개선 파이프라인"], summary="동일 고정 검증 관측으로 후보 모델 비교 준비")
+    def pipeline_compare(run_id: str, config: CandidateModel):
+        return pipeline_call(pipeline().create_comparison, run_id, config.model_version, config.mode)
+
+    @application.get("/pipeline/comparisons/{run_id}", tags=["개선 파이프라인"], summary="상황별 오류 증감, 기본 모델 자동 변경 없음")
+    def pipeline_comparison(run_id: str):
+        return pipeline_call(pipeline().comparison, run_id)
+
     return application
 
 

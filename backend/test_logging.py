@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 import backend.app as api
 from models.model import MOCK_SENSORS, REPORTS_DIR
 from scripts.runtime_logging import RuntimeLogger
+from scripts.simulate import TIME_FEATURE_POLICY
 
 
 class LoggingTests(unittest.TestCase):
@@ -65,6 +66,7 @@ class LoggingTests(unittest.TestCase):
             self.assertEqual(row["sensors"], MOCK_SENSORS)
             self.assertEqual(row["pair_fingerprint"], "f" * 64)
             self.assertEqual(row["label_source"], "model_prediction")
+            self.assertEqual(row["time_feature_policy"]["id"], "unrecorded-legacy")
             self.assertNotIn("ground_truth", row)
             self.assertNotIn("reward", row)
             self.assertTrue(row["timestamp_utc"].endswith("+00:00"))
@@ -74,6 +76,22 @@ class LoggingTests(unittest.TestCase):
         text = (directory / "api.jsonl").read_text() + (directory / "model.jsonl").read_text()
         self.assertNotIn("secret-header", text)
         self.assertNotIn("do-not-store", text)
+
+    def test_new_model_time_policy_is_logged_without_converting_caller_input(self):
+        original = api.load_model.side_effect
+        def policy_model(path):
+            saved = original(path)
+            saved.metadata = {**saved.metadata, "time_feature_policy": TIME_FEATURE_POLICY}
+            return saved
+        sensors = {**MOCK_SENSORS, "Hour": 23, "DayOfWeek": 6}
+        with patch.object(api, "load_model", side_effect=policy_model), TestClient(api.create_app(log_root=self.logs, enable_classrooms=False)) as client:
+            response = client.post("/predict", json=sensors)
+            self.assertEqual(response.status_code, 200)
+            directory = client.app.state.runtime_logger.directory
+        record = self.read(directory, "model")[0]
+        self.assertEqual(record["time_feature_policy"], TIME_FEATURE_POLICY)
+        self.assertEqual(record["sensors"], sensors)
+        self.assertEqual(api.predict_one.call_args.args[1], sensors)
 
     def test_api_restart_keeps_old_logs_and_child_keeps_original_run(self):
         process = Mock(pid=12345)
@@ -161,3 +179,182 @@ class LoggingTests(unittest.TestCase):
         self.assertEqual(rows[3]["result"]["pair_fingerprint"], "b" * 64)
         self.assertEqual(rows[4]["error_type"], "ValueError")
         self.assertTrue(all(row["request_id"] == "request-fixture" for row in rows))
+
+
+class LogTailRecoveryTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.logger = RuntimeLogger(root=Path(temporary.name))
+        self.path = self.logger.directory / "model.jsonl"
+
+    def test_partial_utf8_tail_preserves_valid_prefix_and_exact_damaged_bytes(self):
+        self.logger.write_once("model", "fixture", "old", value=0)
+        prefix = self.path.read_bytes()
+        damaged = b'{"deduplication_key":"interrupted","text":"\xe2\x82'
+        with self.path.open("ab") as stream:
+            stream.write(damaged)
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertTrue(self.logger.write_once("model", "fixture", "next", value=1))
+        self.assertTrue(self.path.read_bytes().startswith(prefix))
+        self.assertEqual([json.loads(line)["deduplication_key"] for line in self.path.read_bytes().splitlines()], ["old", "next"])
+        archives = list(self.logger.directory.glob("*.partial-*.bin"))
+        self.assertEqual([path.read_bytes() for path in archives], [damaged])
+        self.assertFalse(self.logger.write_once("model", "fixture", "next", value=1))
+        self.assertEqual(len(self.path.read_bytes().splitlines()), 2)
+
+    def test_valid_unterminated_record_is_completed_and_not_duplicated(self):
+        original = json.dumps({"deduplication_key": "already-written", "value": 0}).encode()
+        self.path.write_bytes(original)
+        self.assertFalse(self.logger.write_once("model", "fixture", "already-written", value=0))
+        self.assertEqual(self.path.read_bytes(), original + b"\n")
+        self.assertEqual(list(self.logger.directory.glob("*.partial-*.bin")), [])
+
+    def test_general_write_recovers_before_once_and_reverse_order_keeps_zero_and_cache(self):
+        self.logger.write_once("model", "fixture", "old", value=0)
+        prefix = self.path.read_bytes()
+        first_tail = b'{"text":"\xed\x95'
+        with self.path.open("ab") as stream:
+            stream.write(first_tail)
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertTrue(self.logger.write("model", "training", value=0))
+        self.assertTrue(self.path.read_bytes().startswith(prefix))
+        self.assertFalse(self.logger.write_once("model", "fixture", "old", value=0))
+        self.assertTrue(self.logger.write_once("model", "fixture", "next", value=0))
+        second_tail = b'{"text":"second interruption'
+        with self.path.open("ab") as stream:
+            stream.write(second_tail)
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertTrue(self.logger.write_once("model", "fixture", "last", value=0))
+        self.assertTrue(self.logger.write("model", "training", value=0))
+        rows = [json.loads(line) for line in self.path.read_bytes().splitlines()]
+        self.assertEqual([row.get("deduplication_key") for row in rows], ["old", None, "next", "last", None])
+        self.assertTrue(all(row["value"] == 0 for row in rows))
+        self.assertEqual({path.read_bytes() for path in self.logger.directory.glob("*.partial-*.bin")}, {first_tail, second_tail})
+
+    def test_general_write_completes_unterminated_json_without_full_scan_on_healthy_writes(self):
+        original = json.dumps({"deduplication_key": "complete", "value": 0}).encode()
+        self.path.write_bytes(original)
+        self.assertTrue(self.logger.write("model", "fixture", value=0))
+        self.assertTrue(self.path.read_bytes().startswith(original + b"\n"))
+        self.assertFalse(self.logger.write_once("model", "fixture", "complete", value=0))
+        original_open = Path.open
+        scans = []
+        class ObserveReads:
+            def __init__(self, stream): self.stream = stream
+            def __enter__(self): return self
+            def __exit__(self, *args): return self.stream.__exit__(*args)
+            def __getattr__(self, name): return getattr(self.stream, name)
+            def __iter__(self):
+                scans.append("full")
+                return iter(self.stream)
+            def read(self, count=-1):
+                scans.append(count)
+                return self.stream.read(count)
+        def observing_open(target, mode="r", *args, **kwargs):
+            stream = original_open(target, mode, *args, **kwargs)
+            return ObserveReads(stream) if target == self.path and mode == "a+b" else stream
+        with patch.object(Path, "open", observing_open):
+            self.assertTrue(self.logger.write("model", "fixture", value=0))
+            self.assertTrue(self.logger.write_once("model", "fixture", "cached", value=0))
+            self.assertFalse(self.logger.write_once("model", "fixture", "cached", value=0))
+        self.assertEqual(scans, [1, 1, 1])
+        self.assertEqual(list(self.logger.directory.glob("*.partial-*.bin")), [])
+
+    def test_returned_short_write_keeps_failure_contract_and_can_retry_through_other_writer(self):
+        original_open = Path.open
+        class ShortWrite:
+            def __init__(self, stream): self.stream = stream
+            def __enter__(self): return self
+            def __exit__(self, *args): return self.stream.__exit__(*args)
+            def __getattr__(self, name): return getattr(self.stream, name)
+            def __iter__(self): return iter(self.stream)
+            def write(self, value):
+                count = self.stream.write(value[:17])
+                self.stream.flush()
+                return count
+        def broken_open(target, mode="r", *args, **kwargs):
+            stream = original_open(target, mode, *args, **kwargs)
+            return ShortWrite(stream) if target == self.path and mode == "a+b" else stream
+        with patch.object(Path, "open", broken_open), contextlib.redirect_stderr(io.StringIO()):
+            self.assertFalse(self.logger.write("model", "fixture", value=0))
+        partial = self.path.read_bytes()
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertTrue(self.logger.write_once("model", "fixture", "retry", value=0))
+        self.assertEqual(len(self.path.read_bytes().splitlines()), 1)
+        self.assertEqual(next(self.logger.directory.glob("*.partial-*.bin")).read_bytes(), partial)
+        self.assertFalse(self.logger.write("invalid", "fixture"))
+        with self.assertRaises(ValueError): self.logger.write_once("invalid", "fixture", "key")
+
+    def test_mixed_process_writers_recover_one_tail_and_deduplicate_shared_keys(self):
+        partial = b'{"interrupted":"\xe2\x82'
+        self.path.write_bytes(partial)
+        code = "\n".join([
+            "import sys", "from scripts.runtime_logging import RuntimeLogger",
+            "log=RuntimeLogger(root=sys.argv[1],run_id=sys.argv[2])",
+            "for i in range(5):",
+            "    assert log.write('model','fixture',writer=sys.argv[3],item=i,value=0)",
+            "    log.write_once('model','fixture',str(i),value=0)",
+        ])
+        children = [subprocess.Popen([sys.executable, "-c", code, str(self.logger.root), self.logger.run_id, str(i)],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE) for i in range(3)]
+        for child in children:
+            _, error = child.communicate(timeout=30)
+            self.assertEqual(child.returncode, 0, error)
+        rows = [json.loads(line) for line in self.path.read_bytes().splitlines()]
+        self.assertEqual(len(rows), 20)
+        self.assertEqual({row["deduplication_key"] for row in rows if "deduplication_key" in row}, {str(i) for i in range(5)})
+        self.assertTrue(all(row["value"] == 0 for row in rows))
+        self.assertEqual([path.read_bytes() for path in self.logger.directory.glob("*.partial-*.bin")], [partial])
+
+    def test_quarantine_short_write_does_not_truncate_original_and_resumes_preservation(self):
+        self.logger.write_once("model", "fixture", "old", value=0)
+        prefix = self.path.read_bytes()
+        partial = b'{"text":"interrupted utf8 \xed\x95'
+        with self.path.open("ab") as output:
+            output.write(partial)
+        original_open = Path.open
+        @contextlib.contextmanager
+        def short_archive(stream):
+            with stream:
+                yield SimpleNamespace(write=lambda data: stream.write(data[:5]), flush=stream.flush, fileno=stream.fileno)
+        def broken_open(target, mode="r", *args, **kwargs):
+            stream = original_open(target, mode, *args, **kwargs)
+            return short_archive(stream) if ".partial-" in target.name and mode == "xb" else stream
+        with patch.object(Path, "open", broken_open), contextlib.redirect_stderr(io.StringIO()):
+            self.assertFalse(self.logger.write("model", "fixture", value=0))
+        self.assertEqual(self.path.read_bytes(), prefix + partial)
+        self.assertEqual(next(self.logger.directory.glob("*.partial-*.bin")).read_bytes(), partial[:5])
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertTrue(self.logger.write("model", "fixture", value=0))
+        self.assertEqual(next(self.logger.directory.glob("*.partial-*.bin")).read_bytes(), partial)
+        self.assertEqual(len(self.path.read_bytes().splitlines()), 2)
+
+    def test_short_write_exception_then_retry(self):
+        original_open = Path.open
+        path = self.path
+        class ShortWrite:
+            def __init__(self, stream):
+                self.stream = stream
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return self.stream.__exit__(*args)
+            def __getattr__(self, name):
+                return getattr(self.stream, name)
+            def __iter__(self):
+                return iter(self.stream)
+            def write(self, value):
+                self.stream.write(value[:17])
+                self.stream.flush()
+                raise OSError("짧은 쓰기 후 중단")
+        def broken_open(target, mode="r", *args, **kwargs):
+            stream = original_open(target, mode, *args, **kwargs)
+            return ShortWrite(stream) if target == path and mode == "a+b" else stream
+        with patch.object(Path, "open", broken_open), self.assertRaises(OSError):
+            self.logger.write_once("model", "fixture", "retry", value=0)
+        partial = self.path.read_bytes()
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertTrue(self.logger.write_once("model", "fixture", "retry", value=0))
+        self.assertEqual([json.loads(line)["deduplication_key"] for line in self.path.read_bytes().splitlines()], ["retry"])
+        self.assertEqual(next(self.logger.directory.glob("*.partial-*.bin")).read_bytes(), partial)

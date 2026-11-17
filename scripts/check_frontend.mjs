@@ -12,7 +12,7 @@ const server = await createServer({
   plugins: [react(), { name: 'verify-components', enforce: 'pre', transform(source, id) {
     if (!id.endsWith('/src/main.jsx')) return;
     return source.slice(0, source.indexOf('const reactRoot ='))
-      + '\nexport { evaluationGroups, Dashboard, TrainingForm, TrainingMonitor, ReportPanel, reusableTrainingConfig, DEFAULT_CONFIG, PRESETS };';
+      + '\nexport { PipelinePanel, dataPlanMatches, evaluationGroups, Dashboard, TrainingForm, TrainingMonitor, ReportPanel, reusableTrainingConfig, DEFAULT_CONFIG, PRESETS };';
   } }],
 });
 try {
@@ -51,6 +51,41 @@ try {
   }));
   assert.match(invalid, /fit 행이 없습니다/);
   assert.match(invalid.match(/<button type="submit"[^>]*>/)?.[0] || '', /disabled/);
+  const selectedConfig = { ...ui.DEFAULT_CONFIG, synthetic_generation: 'dynamic-sensors-v1-123456abcdef', shared_room_split: true };
+  const selection = Object.fromEntries(['validation_ratio', 'synthetic_generation', 'synthetic_ratio', 'shared_room_split', 'seed', 'pipeline_dataset', 'pipeline_ratio']
+    .map(key => [key, selectedConfig[key]]));
+  const mixedPlan = { ...plan, selection, real_fit_rows: 100, synthetic_fit_rows: 25, real_excluded_rows: 2,
+    synthetic: { generation_id: selectedConfig.synthetic_generation, actual_ratio_to_real_fit: .25, fraction_of_combined_fit: .2,
+      manifest_sha256: 'c'.repeat(64), sampling_seed: 42, rooms: [{ room: 'room_01', partition: 'train', rows: 1000, calibration_source: 'Room_A' }] },
+    warnings: ['생성기는 실제 validation을 포함해 보정됐으므로 독립 검증으로 간주할 수 없습니다.'] };
+  assert.equal(ui.dataPlanMatches(mixedPlan, selectedConfig), true);
+  for (const values of [{ seed: 43 }, { synthetic_ratio: .5 }, { synthetic_generation: null }, { shared_room_split: false }]) {
+    assert.equal(ui.dataPlanMatches(mixedPlan, { ...selectedConfig, ...values }), false);
+  }
+  const mixedProps = { ...props, config: selectedConfig, options: { ...props.options, data_plan: mixedPlan,
+    synthetic_datasets: [{ generation_id: selectedConfig.synthetic_generation, available: true, eligible_rows: 1000 },
+      { generation_id: 'dynamic-sensors-v1-badbadbadbad', available: false, error: 'SHA-256 불일치' }] } };
+  const mixedForm = renderToStaticMarkup(React.createElement(ui.TrainingForm, mixedProps));
+  assert.match(mixedForm, /실제 fit 100행 \+ 합성 25행/);
+  assert.match(mixedForm, /전체 fit 중 합성 20.00%/);
+  assert.match(mixedForm, /validation\/test 방 제외/);
+  assert.match(mixedForm, /독립 검증/);
+  assert.match(mixedForm, /SHA-256 불일치/);
+  assert.match(mixedForm, /예측 로그는 실제 정답이 없어 학습 0행/);
+  assert.doesNotMatch(mixedForm.match(/<button type="submit"[^>]*>/)?.[0] || '', /disabled/);
+  const staleForm = renderToStaticMarkup(React.createElement(ui.TrainingForm, { ...mixedProps,
+    config: { ...selectedConfig, synthetic_ratio: .5 } }));
+  assert.match(staleForm.match(/<button type="submit"[^>]*>/)?.[0] || '', /disabled/);
+  const pipeline = renderToStaticMarkup(React.createElement(ui.PipelinePanel, {
+    registry: { versions, current_version: 'v2' }, options: mixedProps.options, onRefresh() {}, onTraining() {},
+  }));
+  assert.match(pipeline, /실제 fit만 보정/);
+  assert.match(pipeline, /관측 묶음 고정/);
+  assert.match(pipeline, /기존 학습 작업 열기/);
+  assert.match(pipeline, /기본 모델은 자동 교체하지 않습니다/);
+  assert.match(pipeline, /지도학습 재학습이며 강화학습은 아닙니다/);
+  assert.match(pipeline, /스트레스 · 모든 오류 유형 강제 포함/);
+  assert.match(pipeline, /실제 측정된 고장률이 아닌 가정/);
   const report = JSON.parse(await fs.readFile('/app/reports/v3/light_comparison.json', 'utf8'));
   const models = structuredClone(report.modes);
   for (const model of Object.values(models)) {
@@ -68,6 +103,8 @@ try {
   const oldHtml = renderToStaticMarkup(React.createElement(ui.ReportPanel, { report: oldReport, version: 'v7' }));
   assert.match(oldHtml, /v7 학습 보고서/);
   const imported = ui.reusableTrainingConfig(oldReport.config, ui.DEFAULT_CONFIG);
+  assert.equal(imported.synthetic_generation, null);
+  assert.equal(imported.shared_room_split, false);
   assert.equal(Object.hasOwn(imported, 'datasets'), false);
   assert.deepEqual(imported.features, oldReport.config.features);
   assert.equal(imported.activation, oldReport.config.activation);
@@ -137,6 +174,7 @@ try {
   assert.match(initial, /AWS EC2 배포/);
   console.log('PASS: patrol priority/filter; model coexistence; connection/pause suppression; thresholds/limits; humidity trend gap; initial board');
   console.log('PASS: JSX rendering; SHA-256 + row grouping; per-group best; source distributions; preflight disable; preview form ownership; unreadable job display');
+  console.log('PASS: synthetic generation/ratio controls; selected counts and exclusions; calibration caveat; stale plan disable; old config defaults');
 } finally {
   await server.close();
   await fs.rm(cacheDir, { recursive: true, force: true });

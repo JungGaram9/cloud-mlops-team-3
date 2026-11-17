@@ -232,7 +232,8 @@ class ClassroomService:
             if result is not None:
                 self.logger.inference(request_id=request_id, sensors=inputs, version=result["prediction"]["model_version"],
                     mode="with_light", features=result["features"], threshold=result["threshold"], fingerprint=result["fingerprint"],
-                    prediction=result["prediction"], source=source, inference_id=record["inference_id"], context=context)
+                    prediction=result["prediction"], source=source, inference_id=record["inference_id"], context=context,
+                    time_feature_policy=result.get("time_feature_policy"))
             return receipt
 
     def emit(self, request_id=None):
