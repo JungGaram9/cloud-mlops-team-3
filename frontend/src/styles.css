@@ -567,3 +567,17 @@ th { font-weight: 500; }
 .sim-inline .segmented button { justify-content: center; min-height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
 .sim-inline .segmented button:hover:not(:disabled) { background: transparent; color: var(--fg); }
 .sim-inline .segmented button[aria-pressed=true] { background: var(--surface-3); color: var(--fg); }
+
+.synthetic-controls { display: grid; gap: 12px; margin: 20px 0; }
+.data-plan-summary { display: grid; gap: 8px; margin: 16px 0; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font-size: 12px; line-height: 1.7; }
+.data-plan-summary span { display: block; }
+.data-warning { margin: 10px 0; padding: 12px; border-left: 3px solid var(--warn-line); background: var(--warn-bg); color: var(--warn); font-size: 12px; line-height: 1.7; }
+.dataset-exclusions { overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; }
+.dataset-exclusions summary, .data-plan-summary summary { cursor: pointer; }
+.pipeline-layout { display: grid; gap: 20px; }
+.pipeline-layout .panel { display: grid; gap: 14px; }
+.pipeline-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin: 12px 0; }
+.pipeline-layout label { display: grid; gap: 8px; font-size: 12px; }
+.pipeline-layout input, .pipeline-layout select { min-width: 0; width: 100%; background: var(--surface-2); color: var(--fg); padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
+.pipeline-runs { display: flex; flex-wrap: wrap; gap: 8px; }
+.pipeline-evidence pre { max-height: 400px; overflow: auto; padding: 16px; background: var(--surface-2); font-size: 11px; }
