@@ -1,0 +1,1462 @@
+{
+  "experiment": "ec2-live-feedback-20261119",
+  "date": "2026-11-19",
+  "deployment_sha": "dadd44f2ecafefc26d681e836f714179480211c7",
+  "kind": "actual_deployed_http_api",
+  "generation_job": {
+    "id": "8365bdcd688e7e077d8f02d21dbe87641f596c73fa61c11e5adae5362a9497fd",
+    "status": "completed",
+    "config": {
+      "days": 7,
+      "fault_max_minutes": 180,
+      "fault_min_minutes": 30,
+      "fault_probability": 0.03,
+      "observation_mode": "stress",
+      "rooms": 3,
+      "seed": 20261119,
+      "start_date": "2026-11-16",
+      "step_seconds": 300,
+      "timezone": "Asia/Seoul",
+      "validation_ratio": 0.2
+    },
+    "error": null,
+    "generation_id": "dynamic-sensors-v1-b3b578f51897",
+    "quality_passed": true,
+    "reused_output": false,
+    "storage": "CLASSROOM_STATE_DIR/simulated"
+  },
+  "generation": {
+    "calibration_scope": "real_fit_only",
+    "eligible_rows": 5834,
+    "generation_id": "dynamic-sensors-v1-b3b578f51897",
+    "generator_code_sha256": "0c77b8e6cc1bd3f5c5b4a574874c38d3b3e23776d82c9ed15ae8b27fed0140c2",
+    "generator_config": {
+      "calibration_scope": "fit_only",
+      "capacity": 8,
+      "days": 7,
+      "event_probability": 0.03,
+      "fault_max_minutes": 180,
+      "fault_min_minutes": 30,
+      "fault_probability": 0.03,
+      "latitude": 37.5,
+      "mode": "exceptions",
+      "observation_mode": "stress",
+      "rooms": 3,
+      "seed": 20261119,
+      "start_date": "2026-11-16",
+      "step_seconds": 300,
+      "timezone": "Asia/Seoul",
+      "validation_ratio": 0.2,
+      "volume_m3": 90
+    },
+    "label_source": "verified_virtual_people_gt_zero",
+    "manifest_sha256": "7cc32b02967fa14a66607d5ba299f55f2b1c7a498601a705f59f7d5350d305ba",
+    "observation_policy": "finite_in_physical_envelope_no_imputation_v1",
+    "observation_schema": 2,
+    "profile_hash": "b7c27927dbe0d294f81fd057f051714894cf53bc221b24800661f82f1ba1d698",
+    "provenance": {
+      "auxiliary": {
+        "Room_A": {
+          "available": false,
+          "reason": "보조 CSV 없음, 인원수·개구부는 가정 사용"
+        },
+        "Room_B": {
+          "available": false,
+          "reason": "보조 CSV 없음, 인원수·개구부는 가정 사용"
+        }
+      },
+      "canonical_file": "data/training_dataset.csv",
+      "canonical_rows": 32387,
+      "canonical_sha256": "eaedfbabe17840e1a2c6059f892f0f6f436f7b74ed21dfb94a6693d133b1fd65",
+      "excluded": [
+        "test_dataset.csv",
+        "graz_*.csv",
+        "raw copies",
+        "feature occupancy sensor label"
+      ],
+      "real_partition": {
+        "fit_indices_sha256": "7cfed5debcbac563acaccb46931219830013c906090a68011466703f9dadd688",
+        "fit_rows": 25169,
+        "strategy": "shared_graz_calendar_day_1h_gap",
+        "validation_indices_sha256": "ad8318a06714e34977735f57a2d56ba22173327f70a15ebbd3a456f09cdd3a7a",
+        "validation_ratio": 0.2,
+        "validation_rows": 7135
+      },
+      "role": "fit_only",
+      "source_metadata_sha256": "85245720fc5987fc3beed5b74524d4b682c9299ebdd8447cd329fc384f85d559",
+      "time_feature_policy": {
+        "features": {
+          "Room_A": "canonical UTC -> Europe/Vienna (IANA DST)",
+          "Room_B": "canonical UTC -> Europe/Vienna (IANA DST)",
+          "legacy": "CSV wall clock unchanged; unknown timezone is not inferred",
+          "synthetic": "CSV explicit offset local time"
+        },
+        "id": "source-local-time-v1",
+        "inference": "caller supplies Hour/DayOfWeek in the recorded feature basis; no automatic timezone conversion",
+        "split_axis": "Graz and offset-aware timestamps: UTC naive; timezone-unknown legacy: unchanged naive wall clock"
+      },
+      "timezones": {
+        "Room_A": "canonical UTC -> Europe/Vienna",
+        "Room_B": "canonical UTC -> Europe/Vienna",
+        "legacy": "unknown local wall clock, no assumed UTC/Vienna/KST conversion"
+      }
+    },
+    "rooms": [
+      {
+        "audit_sha256": "4cd26f7e21f3097308bdec6e29f036f7466b8179233900273c0830cbbc774410",
+        "calibration_source": "Room_A",
+        "excluded_rows": 59,
+        "exclusion_reasons": {
+          "CO2:missing": 16,
+          "Light:nonfinite": 29,
+          "collection_interruption": 14
+        },
+        "metadata_sha256": "1c7f3799c965bb818088b4ec7c9fcaa3ca7ebaf69b4b8970c59a08b7b2c73030",
+        "observation_policy": "finite_in_physical_envelope_no_imputation_v1",
+        "partition": "train",
+        "raw_sha256": "d6e140e5e278d3a5ba9a7bc8f3f1a7dcd871944b9116066efced4ac40b6cc6be",
+        "room": "room_01",
+        "rows": 1957,
+        "scheduled_rows": 2016,
+        "sha256": "696a05ca03ce6f0675e688de063f38d1d3d937264d16c6eb5581a1ee3de189f0"
+      },
+      {
+        "audit_sha256": "00539ffd5b0d4767f2761880ea376f2b21f67b183ad2bfae7ab28dc1413e7ee9",
+        "calibration_source": "Room_B",
+        "excluded_rows": 100,
+        "exclusion_reasons": {
+          "Temperature:missing": 31,
+          "Temperature:nonfinite": 34,
+          "collection_interruption": 35
+        },
+        "metadata_sha256": "afc29bcea9745a36ec8aaf02be096a95410b66738ea5a8c68ea97c735edc8735",
+        "observation_policy": "finite_in_physical_envelope_no_imputation_v1",
+        "partition": "validation",
+        "raw_sha256": "387f7077450d4d5ed49b44d5b0b40b8c4f32acf4141bc4f0cc5b5bcdb9fa295a",
+        "room": "room_02",
+        "rows": 1916,
+        "scheduled_rows": 2016,
+        "sha256": "68ac420876ee9780f683cfa723d9db947f3738be30291c9a36328763950c2859"
+      },
+      {
+        "audit_sha256": "f894f1a325f2b45bd79c54c25ced0b4c65d2700be6fd47ff1e12bcf83d43b011",
+        "calibration_source": "legacy",
+        "excluded_rows": 55,
+        "exclusion_reasons": {
+          "CO2:nonfinite": 9,
+          "Humidity:missing": 26,
+          "collection_interruption": 20
+        },
+        "metadata_sha256": "c319b0fe72dcc3425d31fef43f0d5dac5d71c145e821f278985d4d47ba8ca95a",
+        "observation_policy": "finite_in_physical_envelope_no_imputation_v1",
+        "partition": "test",
+        "raw_sha256": "fa8d8df42d5d736a2fc78ad23487b1a619e1d6431fd36fef8f1013a1613a5f78",
+        "room": "room_03",
+        "rows": 1961,
+        "scheduled_rows": 2016,
+        "sha256": "6c75ba8a3843c8e321323ed9b7d848b92cbd86eaef27fac66f4779541b24cfb3"
+      }
+    ],
+    "seed": 20261119,
+    "validation_independence": "development_scenarios_only"
+  },
+  "replay": {
+    "run_id": "b3fda143109d9eb7c453a001e747c5164307b0a140ff8b0888b95386a2e4d0b2",
+    "config": {
+      "generation_id": "dynamic-sensors-v1-b3b578f51897",
+      "max_rows": 1500,
+      "mode": "with_light",
+      "model_version": "v7",
+      "seed": 42
+    },
+    "model_fingerprint": "337d48233fefe1ea5fcc9a5fb51a3d082f786c4aa818441e2eb0bff7c0d76194",
+    "observation_hash": "f1a56dfbba4586be450e3dcee3d15998973987d3ddd67f0c24512a80ee8eacd5",
+    "rows": 1500,
+    "processed": 1500,
+    "sampling": {
+      "coverage": {
+        "test": {
+          "eligible_rows": 1961,
+          "selected_rows": 500,
+          "types": {
+            "event:co2_residual": {
+              "eligible": 43,
+              "selected": 14
+            },
+            "event:forgotten_lights": {
+              "eligible": 40,
+              "selected": 10
+            },
+            "event:night_empty_light": {
+              "eligible": 39,
+              "selected": 9
+            },
+            "event:night_occupied": {
+              "eligible": 43,
+              "selected": 11
+            },
+            "event:occupied_dark": {
+              "eligible": 27,
+              "selected": 6
+            },
+            "event:ventilated_occupied": {
+              "eligible": 40,
+              "selected": 9
+            },
+            "event:weekend_empty_light": {
+              "eligible": 34,
+              "selected": 7
+            },
+            "fault:drift": {
+              "eligible": 27,
+              "selected": 8
+            },
+            "fault:dropout": {
+              "eligible": 0,
+              "selected": 0
+            },
+            "fault:freeze": {
+              "eligible": 31,
+              "selected": 11
+            },
+            "fault:missing": {
+              "eligible": 0,
+              "selected": 0
+            },
+            "fault:nonfinite": {
+              "eligible": 0,
+              "selected": 0
+            },
+            "fault:spike": {
+              "eligible": 1,
+              "selected": 1
+            }
+          }
+        },
+        "train": {
+          "eligible_rows": 1957,
+          "selected_rows": 500,
+          "types": {
+            "event:co2_residual": {
+              "eligible": 35,
+              "selected": 8
+            },
+            "event:forgotten_lights": {
+              "eligible": 45,
+              "selected": 10
+            },
+            "event:night_empty_light": {
+              "eligible": 39,
+              "selected": 10
+            },
+            "event:night_occupied": {
+              "eligible": 37,
+              "selected": 11
+            },
+            "event:occupied_dark": {
+              "eligible": 29,
+              "selected": 7
+            },
+            "event:ventilated_occupied": {
+              "eligible": 32,
+              "selected": 11
+            },
+            "event:weekend_empty_light": {
+              "eligible": 41,
+              "selected": 15
+            },
+            "fault:drift": {
+              "eligible": 35,
+              "selected": 10
+            },
+            "fault:dropout": {
+              "eligible": 0,
+              "selected": 0
+            },
+            "fault:freeze": {
+              "eligible": 22,
+              "selected": 6
+            },
+            "fault:missing": {
+              "eligible": 0,
+              "selected": 0
+            },
+            "fault:nonfinite": {
+              "eligible": 0,
+              "selected": 0
+            },
+            "fault:spike": {
+              "eligible": 3,
+              "selected": 1
+            }
+          }
+        },
+        "validation": {
+          "eligible_rows": 1916,
+          "selected_rows": 500,
+          "types": {
+            "event:co2_residual": {
+              "eligible": 41,
+              "selected": 10
+            },
+            "event:forgotten_lights": {
+              "eligible": 36,
+              "selected": 11
+            },
+            "event:night_empty_light": {
+              "eligible": 38,
+              "selected": 8
+            },
+            "event:night_occupied": {
+              "eligible": 39,
+              "selected": 13
+            },
+            "event:occupied_dark": {
+              "eligible": 36,
+              "selected": 8
+            },
+            "event:ventilated_occupied": {
+              "eligible": 45,
+              "selected": 11
+            },
+            "event:weekend_empty_light": {
+              "eligible": 39,
+              "selected": 8
+            },
+            "fault:drift": {
+              "eligible": 19,
+              "selected": 5
+            },
+            "fault:dropout": {
+              "eligible": 0,
+              "selected": 0
+            },
+            "fault:freeze": {
+              "eligible": 21,
+              "selected": 6
+            },
+            "fault:missing": {
+              "eligible": 0,
+              "selected": 0
+            },
+            "fault:nonfinite": {
+              "eligible": 0,
+              "selected": 0
+            },
+            "fault:spike": {
+              "eligible": 1,
+              "selected": 1
+            }
+          }
+        }
+      },
+      "excluded_before_replay": 214,
+      "exclusions": [
+        {
+          "excluded_rows": 59,
+          "partition": "train",
+          "reasons": {
+            "CO2:missing": 16,
+            "Light:nonfinite": 29,
+            "collection_interruption": 14
+          },
+          "room": "room_01"
+        },
+        {
+          "excluded_rows": 100,
+          "partition": "validation",
+          "reasons": {
+            "Temperature:missing": 31,
+            "Temperature:nonfinite": 34,
+            "collection_interruption": 35
+          },
+          "room": "room_02"
+        },
+        {
+          "excluded_rows": 55,
+          "partition": "test",
+          "reasons": {
+            "CO2:nonfinite": 9,
+            "Humidity:missing": 26,
+            "collection_interruption": 20
+          },
+          "room": "room_03"
+        }
+      ],
+      "natural_prevalence": false,
+      "policy": "rare_event_and_fault_coverage_then_partition_balanced_without_replacement"
+    }
+  },
+  "feedback": {
+    "id": "a472eebd4be1f313a9d920e368492fdd168c19f63c077d7f205b392d6f90e35c",
+    "rows": 300,
+    "uniform_rows": 150,
+    "error_boost_rows": 49,
+    "selected_general_rows": 251,
+    "selected_error_boost_rows": 49,
+    "duplicates_excluded": 0,
+    "selected_row_keys_sha256": "b3b76d43566afeb1dc6c4145c0f895d0b8eb5300c366b70fb8499df08cda284d",
+    "partitions": [
+      "train",
+      "train_only"
+    ],
+    "label_source": "verified_virtual_people_gt_zero"
+  },
+  "training": {
+    "job_id": "9c44793f54d04c7e874ce436431fb190",
+    "status": "completed",
+    "version": "v8",
+    "config": {
+      "name": "EC2 fit-only 피드백 1회 · 20261119",
+      "features": [
+        "Temperature",
+        "Humidity",
+        "Light",
+        "CO2",
+        "Hour"
+      ],
+      "epochs": 200,
+      "learning_rate": 0.01,
+      "batch_size": 0,
+      "hidden_layers": [
+        16,
+        8
+      ],
+      "activation": "tanh",
+      "optimizer": "adam",
+      "dropout": 0,
+      "weight_decay": 0,
+      "validation_ratio": 0.2,
+      "patience": 30,
+      "threshold": 0.5,
+      "seed": 42,
+      "normalize": true,
+      "balance_classes": false,
+      "compare_light": false,
+      "make_default": false,
+      "synthetic_generation": null,
+      "synthetic_ratio": 0.25,
+      "shared_room_split": true,
+      "pipeline_dataset": "a472eebd4be1f313a9d920e368492fdd168c19f63c077d7f205b392d6f90e35c",
+      "pipeline_ratio": 0.25
+    },
+    "log_run_id": "20261119T023824_516583Z-ef0acbe82bbc",
+    "request_id": "978cd4a1b0184e708613942428521110",
+    "log_root": "/app/logs",
+    "started_at": "2026-11-19T11:46:16.177117+09:00",
+    "finished_at": "2026-11-19T11:46:22.39017+09:00",
+    "duration_seconds": 6.145,
+    "epochs_run": 57,
+    "best_epoch": 27,
+    "best_validation_loss": 0.2133902907371521,
+    "data_plan_sha256": "b98c47bf7837f11011defc452135ddd190065b3166a88ce16af2410c8703e3fd",
+    "real_fit_rows": 25169,
+    "feedback_fit_rows": 300,
+    "combined_fit_rows": 25469,
+    "real_validation_rows": 7135,
+    "real_excluded_rows": 83,
+    "real_test_rows": 18479,
+    "time_feature_policy": {
+      "id": "source-local-time-v1",
+      "features": {
+        "Room_A": "canonical UTC -> Europe/Vienna (IANA DST)",
+        "Room_B": "canonical UTC -> Europe/Vienna (IANA DST)",
+        "legacy": "CSV wall clock unchanged; unknown timezone is not inferred",
+        "synthetic": "CSV explicit offset local time"
+      },
+      "split_axis": "Graz and offset-aware timestamps: UTC naive; timezone-unknown legacy: unchanged naive wall clock",
+      "inference": "caller supplies Hour/DayOfWeek in the recorded feature basis; no automatic timezone conversion"
+    },
+    "validation_metrics": {
+      "accuracy": 0.9216538192011212,
+      "precision": 0.8356401384083045,
+      "recall": 0.840975043528729,
+      "f1": 0.8382991032687301,
+      "roc_auc": 0.9746194480226869,
+      "average_precision": 0.9116412547464521,
+      "probability_mae": 0.14540144801139832,
+      "brier_score": 0.0576343834400177,
+      "confusion_matrix": [
+        [
+          5127,
+          285
+        ],
+        [
+          274,
+          1449
+        ]
+      ]
+    }
+  },
+  "comparison": {
+    "run_id": "b16fd4034b4485f15aa3b65de6a3c12de8ad78cf3e3c51c5690df08428d60c7b",
+    "baseline_run_id": "b3fda143109d9eb7c453a001e747c5164307b0a140ff8b0888b95386a2e4d0b2",
+    "model_fingerprint": "525594415c70bd9095a023abf16de858d07f6e5df212e1a9ccef349282b0f92a",
+    "observation_hash": "2360a0108f43e05114ab43f1ac094227c227bdcf574e11205b20867b5a0c2f7b",
+    "complete": true,
+    "same_observations": true,
+    "independence": "development_scenarios_only",
+    "v7": {
+      "rows": 1000,
+      "labelled_rows": 1000,
+      "unlabelled_rows": 0,
+      "available": true,
+      "single_class": false,
+      "confusion_matrix": [
+        [
+          835,
+          27
+        ],
+        [
+          126,
+          12
+        ]
+      ],
+      "errors": 153,
+      "accuracy": 0.847,
+      "precision": 0.3076923076923077,
+      "recall": 0.08695652173913043,
+      "f1": 0.13559322033898305,
+      "source": "simulation_verified_virtual_people",
+      "final_real_test": false,
+      "natural_prevalence": false
+    },
+    "v8": {
+      "rows": 1000,
+      "labelled_rows": 1000,
+      "unlabelled_rows": 0,
+      "available": true,
+      "single_class": false,
+      "confusion_matrix": [
+        [
+          831,
+          31
+        ],
+        [
+          123,
+          15
+        ]
+      ],
+      "errors": 154,
+      "accuracy": 0.846,
+      "precision": 0.32608695652173914,
+      "recall": 0.10869565217391304,
+      "f1": 0.16304347826086957,
+      "source": "simulation_verified_virtual_people",
+      "final_real_test": false,
+      "natural_prevalence": false
+    },
+    "groups": {
+      "co2_residual": {
+        "rows": 24,
+        "v7": {
+          "accuracy": 0.7916666666666666,
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              19,
+              0
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "errors": 5
+        },
+        "v8": {
+          "accuracy": 0.7916666666666666,
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              19,
+              0
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "errors": 5
+        }
+      },
+      "fault:drift": {
+        "rows": 13,
+        "v7": {
+          "accuracy": 0.6153846153846154,
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              8,
+              0
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "errors": 5
+        },
+        "v8": {
+          "accuracy": 0.6153846153846154,
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              8,
+              0
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "errors": 5
+        }
+      },
+      "fault:dropout": {
+        "rows": 0,
+        "v7": {
+          "accuracy": null,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        },
+        "v8": {
+          "accuracy": null,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        }
+      },
+      "fault:freeze": {
+        "rows": 17,
+        "v7": {
+          "accuracy": 1,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              17,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        },
+        "v8": {
+          "accuracy": 1,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              17,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        }
+      },
+      "fault:missing": {
+        "rows": 0,
+        "v7": {
+          "accuracy": null,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        },
+        "v8": {
+          "accuracy": null,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        }
+      },
+      "fault:nonfinite": {
+        "rows": 0,
+        "v7": {
+          "accuracy": null,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        },
+        "v8": {
+          "accuracy": null,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        }
+      },
+      "fault:spike": {
+        "rows": 2,
+        "v7": {
+          "accuracy": 0.5,
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 1
+        },
+        "v8": {
+          "accuracy": 0.5,
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              1,
+              1
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 1
+        }
+      },
+      "forgotten_lights": {
+        "rows": 21,
+        "v7": {
+          "accuracy": 0.3333333333333333,
+          "precision": 0.3333333333333333,
+          "recall": 1,
+          "f1": 0.5,
+          "confusion_matrix": [
+            [
+              0,
+              14
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "errors": 14
+        },
+        "v8": {
+          "accuracy": 0.3333333333333333,
+          "precision": 0.3333333333333333,
+          "recall": 1,
+          "f1": 0.5,
+          "confusion_matrix": [
+            [
+              0,
+              14
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "errors": 14
+        }
+      },
+      "night": {
+        "rows": 414,
+        "v7": {
+          "accuracy": 0.9444444444444444,
+          "precision": 0.7142857142857143,
+          "recall": 0.19230769230769232,
+          "f1": 0.30303030303030304,
+          "confusion_matrix": [
+            [
+              386,
+              2
+            ],
+            [
+              21,
+              5
+            ]
+          ],
+          "errors": 23
+        },
+        "v8": {
+          "accuracy": 0.9444444444444444,
+          "precision": 0.7142857142857143,
+          "recall": 0.19230769230769232,
+          "f1": 0.30303030303030304,
+          "confusion_matrix": [
+            [
+              386,
+              2
+            ],
+            [
+              21,
+              5
+            ]
+          ],
+          "errors": 23
+        }
+      },
+      "night_empty_light": {
+        "rows": 17,
+        "v7": {
+          "accuracy": 1,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              17,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        },
+        "v8": {
+          "accuracy": 1,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              17,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        }
+      },
+      "night_occupied": {
+        "rows": 24,
+        "v7": {
+          "accuracy": 0.20833333333333334,
+          "precision": 1,
+          "recall": 0.20833333333333334,
+          "f1": 0.3448275862068966,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              19,
+              5
+            ]
+          ],
+          "errors": 19
+        },
+        "v8": {
+          "accuracy": 0.20833333333333334,
+          "precision": 1,
+          "recall": 0.20833333333333334,
+          "f1": 0.3448275862068966,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              19,
+              5
+            ]
+          ],
+          "errors": 19
+        }
+      },
+      "occupied_dark": {
+        "rows": 14,
+        "v7": {
+          "accuracy": 0,
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              14,
+              0
+            ]
+          ],
+          "errors": 14
+        },
+        "v8": {
+          "accuracy": 0,
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              14,
+              0
+            ]
+          ],
+          "errors": 14
+        }
+      },
+      "ordinary_use": {
+        "rows": 71,
+        "v7": {
+          "accuracy": 0,
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              71,
+              0
+            ]
+          ],
+          "errors": 71
+        },
+        "v8": {
+          "accuracy": 0.04225352112676056,
+          "precision": 1,
+          "recall": 0.04225352112676056,
+          "f1": 0.08108108108108109,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              68,
+              3
+            ]
+          ],
+          "errors": 68
+        }
+      },
+      "partition:test": {
+        "rows": 500,
+        "v7": {
+          "accuracy": 0.882,
+          "precision": 0.391304347826087,
+          "recall": 0.16666666666666666,
+          "f1": 0.23376623376623376,
+          "confusion_matrix": [
+            [
+              432,
+              14
+            ],
+            [
+              45,
+              9
+            ]
+          ],
+          "errors": 59
+        },
+        "v8": {
+          "accuracy": 0.882,
+          "precision": 0.391304347826087,
+          "recall": 0.16666666666666666,
+          "f1": 0.23376623376623376,
+          "confusion_matrix": [
+            [
+              432,
+              14
+            ],
+            [
+              45,
+              9
+            ]
+          ],
+          "errors": 59
+        }
+      },
+      "partition:train": {
+        "rows": 0,
+        "v7": {
+          "accuracy": null,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        },
+        "v8": {
+          "accuracy": null,
+          "precision": null,
+          "recall": null,
+          "f1": null,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 0
+        }
+      },
+      "partition:validation": {
+        "rows": 500,
+        "v7": {
+          "accuracy": 0.812,
+          "precision": 0.1875,
+          "recall": 0.03571428571428571,
+          "f1": 0.06,
+          "confusion_matrix": [
+            [
+              403,
+              13
+            ],
+            [
+              81,
+              3
+            ]
+          ],
+          "errors": 94
+        },
+        "v8": {
+          "accuracy": 0.81,
+          "precision": 0.2608695652173913,
+          "recall": 0.07142857142857142,
+          "f1": 0.11214953271028037,
+          "confusion_matrix": [
+            [
+              399,
+              17
+            ],
+            [
+              78,
+              6
+            ]
+          ],
+          "errors": 95
+        }
+      },
+      "room:room_02": {
+        "rows": 500,
+        "v7": {
+          "accuracy": 0.812,
+          "precision": 0.1875,
+          "recall": 0.03571428571428571,
+          "f1": 0.06,
+          "confusion_matrix": [
+            [
+              403,
+              13
+            ],
+            [
+              81,
+              3
+            ]
+          ],
+          "errors": 94
+        },
+        "v8": {
+          "accuracy": 0.81,
+          "precision": 0.2608695652173913,
+          "recall": 0.07142857142857142,
+          "f1": 0.11214953271028037,
+          "confusion_matrix": [
+            [
+              399,
+              17
+            ],
+            [
+              78,
+              6
+            ]
+          ],
+          "errors": 95
+        }
+      },
+      "room:room_03": {
+        "rows": 500,
+        "v7": {
+          "accuracy": 0.882,
+          "precision": 0.391304347826087,
+          "recall": 0.16666666666666666,
+          "f1": 0.23376623376623376,
+          "confusion_matrix": [
+            [
+              432,
+              14
+            ],
+            [
+              45,
+              9
+            ]
+          ],
+          "errors": 59
+        },
+        "v8": {
+          "accuracy": 0.882,
+          "precision": 0.391304347826087,
+          "recall": 0.16666666666666666,
+          "f1": 0.23376623376623376,
+          "confusion_matrix": [
+            [
+              432,
+              14
+            ],
+            [
+              45,
+              9
+            ]
+          ],
+          "errors": 59
+        }
+      },
+      "ventilated_occupied": {
+        "rows": 20,
+        "v7": {
+          "accuracy": 0,
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              20,
+              0
+            ]
+          ],
+          "errors": 20
+        },
+        "v8": {
+          "accuracy": 0,
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              0,
+              0
+            ],
+            [
+              20,
+              0
+            ]
+          ],
+          "errors": 20
+        }
+      },
+      "weekend": {
+        "rows": 286,
+        "v7": {
+          "accuracy": 0.9440559440559441,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              270,
+              11
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "errors": 16
+        },
+        "v8": {
+          "accuracy": 0.9300699300699301,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              266,
+              15
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "errors": 20
+        }
+      },
+      "weekend_empty_light": {
+        "rows": 15,
+        "v7": {
+          "accuracy": 0.26666666666666666,
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              4,
+              11
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 11
+        },
+        "v8": {
+          "accuracy": 0,
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "confusion_matrix": [
+            [
+              0,
+              15
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "errors": 15
+        }
+      }
+    }
+  },
+  "historical_real_test": {
+    "comparable": false,
+    "reason": "v7은 UCI 12417행, v8은 UCI+Graz 18479행으로 전체 평가 파일 SHA256과 코호트가 다르다. 동일 실제 코호트로 v7을 재평가하지 않았으므로 개선폭을 계산하지 않는다.",
+    "v7": {
+      "rows": 12417,
+      "sha256": "b906f685ef1140854169af240458f556b0cecc832e8d03fc9a468aaf2b25a698",
+      "metrics": {
+        "accuracy": 0.8742852540871386,
+        "precision": 0.6624388072986204,
+        "recall": 0.9854352863290301,
+        "f1": 0.7922821024617431,
+        "roc_auc": 0.9562123951693897,
+        "average_precision": 0.8693605614818379,
+        "probability_mae": 0.19155895709991455,
+        "brier_score": 0.10575180500745773,
+        "confusion_matrix": [
+          [
+            7879,
+            1517
+          ],
+          [
+            44,
+            2977
+          ]
+        ]
+      }
+    },
+    "v8": {
+      "rows": 18479,
+      "sha256": "ff089d006a2b8b8aac85e9e4e9023ebc6d63b2977c7981f644039c56dc094309",
+      "metrics": {
+        "accuracy": 0.8932842686292548,
+        "precision": 0.6939832172826281,
+        "recall": 0.9377563329312425,
+        "f1": 0.7976605786989535,
+        "roc_auc": 0.9576579544733492,
+        "average_precision": 0.8599733236596537,
+        "probability_mae": 0.18178501725196838,
+        "brier_score": 0.08630572259426117,
+        "confusion_matrix": [
+          [
+            12620,
+            1714
+          ],
+          [
+            258,
+            3887
+          ]
+        ]
+      }
+    }
+  },
+  "final": {
+    "health": {
+      "status": "ok",
+      "model_version": "v7",
+      "framework": "pytorch"
+    },
+    "default_version": "v7",
+    "baseline_pair_fingerprint_before": "0ded08daed4d294df913bc803208912209dd8a28815076270a6662702a961e79",
+    "baseline_pair_fingerprint_after": "0ded08daed4d294df913bc803208912209dd8a28815076270a6662702a961e79",
+    "training_job_count": 1
+  },
+  "evidence": {
+    "inference_samples": [
+      {
+        "inference_id": "272c97c19a623b0e0982908567a9bf1f0bd4af36a9d73fb4c196dca93fc0e7c7",
+        "key": "dynamic-sensors-v1-b3b578f51897:room_03:3714ae43259dc73466c34e20",
+        "row_id": "3714ae43259dc73466c34e20",
+        "room": "room_03",
+        "observed_at": "2026-11-21T15:10:00+09:00",
+        "truth": 0,
+        "prediction": 1,
+        "model_version": "v7",
+        "model_fingerprint": "337d48233fefe1ea5fcc9a5fb51a3d082f786c4aa818441e2eb0bff7c0d76194"
+      },
+      {
+        "inference_id": "888c353631dca82d1831f465740f8bfb0a094448217203f6fa614605f5f195e4",
+        "key": "dynamic-sensors-v1-b3b578f51897:room_03:840303419bc5b0e953895551",
+        "row_id": "840303419bc5b0e953895551",
+        "room": "room_03",
+        "observed_at": "2026-11-18T18:25:00+09:00",
+        "truth": 0,
+        "prediction": 1,
+        "model_version": "v7",
+        "model_fingerprint": "337d48233fefe1ea5fcc9a5fb51a3d082f786c4aa818441e2eb0bff7c0d76194"
+      },
+      {
+        "inference_id": "0d6330411878936c9e16e034abed85ca9641238dcf2a57c639237d74c55c142a",
+        "key": "dynamic-sensors-v1-b3b578f51897:room_03:3714ae43259dc73466c34e20",
+        "row_id": "3714ae43259dc73466c34e20",
+        "room": "room_03",
+        "observed_at": "2026-11-21T15:10:00+09:00",
+        "truth": 0,
+        "prediction": 1,
+        "model_version": "v8",
+        "model_fingerprint": "525594415c70bd9095a023abf16de858d07f6e5df212e1a9ccef349282b0f92a"
+      },
+      {
+        "inference_id": "3b0408d77849307be7c2d1afc730480a7a177bc6feb42553b24852524fb4f945",
+        "key": "dynamic-sensors-v1-b3b578f51897:room_02:a3cc9d70a091b527bf4d8e30",
+        "row_id": "a3cc9d70a091b527bf4d8e30",
+        "room": "room_02",
+        "observed_at": "2026-11-21T14:15:00+09:00",
+        "truth": 0,
+        "prediction": 1,
+        "model_version": "v8",
+        "model_fingerprint": "525594415c70bd9095a023abf16de858d07f6e5df212e1a9ccef349282b0f92a"
+      }
+    ],
+    "local_response_sha256": {
+      "generation-status.json": "c4d61bff59c4f0a790dd4b219377c9fb5ce132fdb3a445fac2522a3d05c6dfbf",
+      "baseline-analysis.json": "b9da3a46e284db93233c8efe0f98ef924b591486602c72b7e534d4bff8b8f04d",
+      "feedback-dataset.json": "37b3002eac9395fe8ef25580598588c591af0534cb4c64ab0ca97bd4aec3b307",
+      "candidate-options.json": "5c4dcaca61588526c2f12661ca014e84f1998648615d268a64c22dfd42b3bdec",
+      "candidate-config.json": "059eb154989e714fde1b67c7ac25e4bd6db668871079cb2326e2a5c4f05d396a",
+      "candidate-status.json": "218df9f519f11c03296a32a5832f7fe900688fa5cbe3e7dd2169b91b2ad2d76f",
+      "v7-training-report.json": "f281f561ebcab2d484cca3e76a207666976b458d5a25f94822ac787273d42089",
+      "v8-training-report.json": "1616ed90b8146627d537c8656f04d19b56a64606e5918d8259d184d5199473ef",
+      "comparison.json": "ad6c74ef1b9e67747cca04fd03feb75e1a849d289c4848580d9cbbaeb3db3adf",
+      "final-health.json": "280009f2f8e34ce7ac23afa102997fe6e3b74617d8591d70ff220c1ba5381073",
+      "final-v7-report.json": "f281f561ebcab2d484cca3e76a207666976b458d5a25f94822ac787273d42089",
+      "final-versions.json": "a355fab828f26f3fc6664b006ca2c773a31077d59f787bf26b13fedf60b78a0b",
+      "final-jobs.json": "95e643144c20743b7c6dd34ce521fbe700073fa3961d7a50a60ccd77772f0eef"
+    }
+  },
+  "limitations": [
+    "반복 개발용 합성 시나리오이며 실제 현장 정확도 및 자연 발생 비율을 나타내지 않는다.",
+    "기존 v7과 후보의 실제 데이터 구성·시간 피처 정책·분할이 달라 피드백만의 인과적 개선으로 해석할 수 없다.",
+    "HTTP 분석 API는 오판 최대 50건만 노출한다. 전체 SQLite/JSONL·CSV 원본은 EC2에 보존되며 SSH 접근 불가로 내려받아 대조하지 않았다. API 집계·품질검사·SHA256·추론 식별자를 근거로 기록한다.",
+    "조도 수치 임계값별 전체 부분집합은 API로 확인할 수 없어 이벤트 태그별 집계를 사용한다. 그룹은 중복될 수 있다.",
+    "추가 학습·튜닝·후보 활성화·재배포는 수행하지 않았다."
+  ]
+}
